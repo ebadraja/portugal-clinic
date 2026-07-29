@@ -1,0 +1,294 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* ─── Tailwind v4: class-based dark mode ─────────────────────────────────── */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ─── @theme inline ────────────────────────────────────────────────────────── */
+/* Maps Tailwind utility classes (bg-popover, bg-card, text-foreground,        */
+/* border-border, ring-ring, font-heading, etc.) to CSS custom properties.     */
+/* Without this block every shadcn component background resolves to nothing.   */
+@theme inline {
+  /* Color utilities */
+  --color-background:           var(--background);
+  --color-foreground:           var(--foreground);
+  --color-card:                 var(--card);
+  --color-card-foreground:      var(--card-foreground);
+  --color-popover:              var(--popover);
+  --color-popover-foreground:   var(--popover-foreground);
+  --color-primary:              var(--primary);
+  --color-primary-foreground:   var(--primary-foreground);
+  --color-secondary:            var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted:                var(--muted);
+  --color-muted-foreground:     var(--muted-foreground);
+  --color-accent:               var(--accent);
+  --color-accent-foreground:    var(--accent-foreground);
+  --color-destructive:          var(--destructive);
+  --color-border:               var(--border);
+  --color-input:                var(--input);
+  --color-ring:                 var(--ring);
+
+  /* Radius (used by button size variants) */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Heading font (used by Card / Dialog titles) */
+  --font-heading: var(--font-sans);
+}
+
+/* ─── Light mode tokens ──────────────────────────────────────────────────── */
+:root {
+  /* Primitive tokens consumed by @theme inline above */
+  --background:           #ffffff;
+  --foreground:           #0f172a;   /* slate-900 */
+  --card:                 #ffffff;
+  --card-foreground:      #0f172a;
+  --popover:              #ffffff;
+  --popover-foreground:   #0f172a;
+  --primary:              #1e293b;   /* slate-800 */
+  --primary-foreground:   #f8fafc;   /* slate-50  */
+  --secondary:            #f1f5f9;   /* slate-100 */
+  --secondary-foreground: #1e293b;
+  --muted:                #f1f5f9;   /* slate-100 */
+  --muted-foreground:     #64748b;   /* slate-500 */
+  --accent:               #f1f5f9;
+  --accent-foreground:    #1e293b;
+  --destructive:          #ef4444;   /* red-500   */
+  --border:               #e2e8f0;   /* slate-200 */
+  --input:                #e2e8f0;
+  --ring:                 #94a3b8;   /* slate-400 */
+  --radius:               0.5rem;
+
+  /* App semantic tokens (kept for base-layer styles) */
+  --color-bg:        #f8fafc;
+  --color-surface:   #ffffff;
+  --color-surface-2: #f1f5f9;
+  --color-surface-3: #e2e8f0;
+  --color-text-1:    #0f172a;
+  --color-text-2:    #475569;
+  --color-text-3:    #94a3b8;
+  --color-border-2:  #f1f5f9;
+
+  color-scheme: light;
+}
+
+/* ─── Dark mode tokens ───────────────────────────────────────────────────── */
+:root.dark {
+  /* Primitive tokens */
+  --background:           #0f172a;                /* slate-900 */
+  --foreground:           #f8fafc;                /* slate-50  */
+  --card:                 #1e293b;                /* slate-800 */
+  --card-foreground:      #f8fafc;
+  --popover:              #1e293b;                /* slate-800 */
+  --popover-foreground:   #f8fafc;
+  --primary:              #f8fafc;                /* slate-50  */
+  --primary-foreground:   #1e293b;                /* slate-800 */
+  --secondary:            #334155;                /* slate-700 */
+  --secondary-foreground: #f8fafc;
+  --muted:                #334155;                /* slate-700 */
+  --muted-foreground:     #94a3b8;                /* slate-400 */
+  --accent:               #334155;
+  --accent-foreground:    #f8fafc;
+  --destructive:          #f87171;                /* red-400   */
+  --border:               rgba(255, 255, 255, 0.1);
+  --input:                rgba(255, 255, 255, 0.15);
+  --ring:                 #64748b;                /* slate-500 */
+
+  /* App semantic tokens */
+  --color-bg:        #020617;
+  --color-surface:   #0f172a;
+  --color-surface-2: #1e293b;
+  --color-surface-3: #334155;
+  --color-text-1:    #f8fafc;
+  --color-text-2:    #94a3b8;
+  --color-text-3:    #64748b;
+  --color-border-2:  #1e293b;
+
+  color-scheme: dark;
+}
+
+/* ─── Base layer ─────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    @apply font-sans;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50;
+  }
+
+  h1 {
+    @apply text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-50 leading-tight;
+  }
+  h2 {
+    @apply text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50 leading-tight;
+  }
+  h3 {
+    @apply text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-50;
+  }
+  h4 {
+    @apply text-base font-semibold text-slate-900 dark:text-slate-50;
+  }
+
+  p {
+    @apply text-[15px] font-normal text-slate-600 dark:text-slate-400 leading-relaxed;
+  }
+
+  small {
+    @apply text-sm font-normal text-slate-600 dark:text-slate-400;
+  }
+
+  a {
+    @apply text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors;
+  }
+
+  /* Default border color switches with theme */
+  * {
+    border-color: var(--color-border);
+  }
+
+  /* Focus ring */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    @apply outline-none ring-2 ring-blue-500 dark:ring-blue-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-950;
+  }
+
+  /* Smooth colour transitions only — not all properties (avoids janky layout) */
+  *,
+  *::before,
+  *::after {
+    transition-property: color, background-color, border-color, box-shadow, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+/* ─── Component layer ────────────────────────────────────────────────────── */
+@layer components {
+
+  /* ── Cards / surfaces ── */
+  .card-base {
+    @apply bg-white dark:bg-slate-900
+           border border-slate-200/60 dark:border-slate-700/60
+           rounded-xl shadow-sm hover:shadow-md transition-shadow;
+  }
+
+  .surface-muted {
+    @apply bg-slate-50 dark:bg-slate-800/50;
+  }
+
+  /* ── Typography helpers ── */
+  .text-primary   { @apply text-slate-900 dark:text-slate-50; }
+  .text-secondary { @apply text-slate-600 dark:text-slate-400; }
+  .text-muted     { @apply text-slate-400 dark:text-slate-500; }
+  .label-upper    { @apply text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400; }
+
+  /* ── Inputs ── */
+  .input-base {
+    @apply h-10 w-full px-3
+           bg-white dark:bg-slate-800
+           border border-slate-200 dark:border-slate-700
+           rounded-lg text-sm
+           text-slate-900 dark:text-slate-100
+           placeholder:text-slate-400 dark:placeholder:text-slate-500
+           focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500
+           dark:focus:ring-blue-400/30 dark:focus:border-blue-400
+           transition-colors;
+  }
+
+  /* ── Buttons ── */
+  .btn-primary {
+    @apply bg-slate-900 dark:bg-blue-600
+           hover:bg-slate-800 dark:hover:bg-blue-700
+           text-white font-medium h-10 px-5 rounded-lg shadow-sm
+           transition-all hover:scale-[1.02];
+  }
+
+  .btn-secondary {
+    @apply border border-slate-200 dark:border-slate-700
+           bg-white dark:bg-slate-800
+           hover:bg-slate-50 dark:hover:bg-slate-700
+           text-slate-700 dark:text-slate-300
+           font-medium h-10 px-5 rounded-lg transition-all;
+  }
+
+  .btn-ghost {
+    @apply text-slate-600 dark:text-slate-400
+           hover:text-slate-900 dark:hover:text-slate-50
+           hover:bg-slate-100 dark:hover:bg-slate-800
+           font-medium h-9 px-3 rounded-lg transition-all;
+  }
+
+  /* ── Filter pills (page sub-headers) ── */
+  .filter-pill {
+    @apply h-9 px-3.5 rounded-lg font-medium text-xs transition-all whitespace-nowrap
+           border border-slate-200 dark:border-slate-700
+           bg-white dark:bg-slate-800
+           text-slate-700 dark:text-slate-300
+           hover:bg-slate-50 dark:hover:bg-slate-700;
+  }
+  .filter-pill-active {
+    @apply bg-slate-900 dark:bg-blue-600
+           text-white border-transparent
+           shadow-sm hover:bg-slate-800 dark:hover:bg-blue-700;
+  }
+
+  /* ── Status badges ── */
+  .badge-success {
+    @apply bg-emerald-50 dark:bg-emerald-950
+           text-emerald-700 dark:text-emerald-300
+           border border-emerald-200/60 dark:border-emerald-800/60;
+  }
+  .badge-warning {
+    @apply bg-amber-50 dark:bg-amber-950
+           text-amber-700 dark:text-amber-300
+           border border-amber-200/60 dark:border-amber-800/60;
+  }
+  .badge-info {
+    @apply bg-blue-50 dark:bg-blue-950
+           text-blue-700 dark:text-blue-300
+           border border-blue-200/60 dark:border-blue-800/60;
+  }
+  .badge-neutral {
+    @apply bg-slate-100 dark:bg-slate-800
+           text-slate-700 dark:text-slate-300
+           border border-slate-200/60 dark:border-slate-700/60;
+  }
+  .badge-error {
+    @apply bg-red-50 dark:bg-red-950
+           text-red-700 dark:text-red-300
+           border border-red-200/60 dark:border-red-800/60;
+  }
+
+  /* ── Stat card ── */
+  .stat-card {
+    @apply bg-white dark:bg-slate-900
+           border border-slate-200/60 dark:border-slate-700/60
+           rounded-xl p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow;
+  }
+  .stat-value {
+    @apply text-2xl md:text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-50;
+  }
+  .stat-label {
+    @apply text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400;
+  }
+
+  /* ── Table ── */
+  .table-header-cell {
+    @apply text-xs font-semibold uppercase tracking-wider
+           text-slate-600 dark:text-slate-400
+           bg-slate-50/80 dark:bg-slate-800/50;
+  }
+  .table-row-hover {
+    @apply hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors;
+  }
+}

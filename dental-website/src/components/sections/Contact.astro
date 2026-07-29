@@ -1,0 +1,222 @@
+---
+import type { Lang } from '../../i18n';
+import { localizePath, useTranslations } from '../../i18n';
+import { site } from '../../data/site';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+const waUrl = `https://wa.me/${site.whatsapp}?text=${encodeURIComponent(t.hero.whatsappMessage)}`;
+const web3formsKey = import.meta.env.PUBLIC_WEB3FORMS_KEY || 'YOUR_WEB3FORMS_ACCESS_KEY';
+---
+
+<section id="contactos" class="section-pad bg-surface" aria-labelledby="contactos-title">
+  <div class="container-site">
+    <div class="fade-up mx-auto max-w-2xl text-center">
+      <p class="text-sm font-semibold uppercase tracking-[0.16em] text-accent">{t.contact.eyebrow}</p>
+      <h2 id="contactos-title" class="mt-3 text-2xl text-primary-dark sm:text-3xl md:text-4xl">
+        {t.contact.title}
+      </h2>
+      <p class="mt-4 text-muted">{t.contact.intro}</p>
+    </div>
+
+    <div class="mt-12 grid gap-8 lg:grid-cols-2 lg:gap-10">
+      <div class="fade-up space-y-6">
+        <div class="rounded-[var(--radius-card)] border border-border bg-white p-5 shadow-soft sm:p-6">
+          <h3 class="font-display text-xl text-primary-dark">{t.contact.addressTitle}</h3>
+          <ul class="mt-4 space-y-3 text-[0.95rem] text-muted">
+            <li class="flex gap-3">
+              <span class="mt-0.5 text-primary" aria-hidden="true">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 21s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10Z" stroke-linejoin="round"/><circle cx="12" cy="11" r="2.2"/></svg>
+              </span>
+              <a href={site.mapsUrl} target="_blank" rel="noopener noreferrer" class="hover:text-primary">
+                {site.address.street}<br />{site.address.locality}, {site.address.region}
+              </a>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 text-primary" aria-hidden="true">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8.5 4.5h2.2l1 4.2-1.7 1a12.5 12.5 0 0 0 5.3 5.3l1-1.7 4.2 1v2.2a1.8 1.8 0 0 1-1.8 1.8A15.7 15.7 0 0 1 3.7 6.3 1.8 1.8 0 0 1 5.5 4.5Z" stroke-linejoin="round"/></svg>
+              </span>
+              <a href={`tel:${site.phoneTel}`} class="hover:text-primary">{site.phoneDisplay}</a>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 text-primary" aria-hidden="true">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6.5h16v11H4z" stroke-linejoin="round"/><path d="m4 7 8 6 8-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+              <a href={`mailto:${site.email}`} class="hover:text-primary">{site.email}</a>
+            </li>
+            <li class="flex gap-3">
+              <span class="mt-0.5 text-primary" aria-hidden="true">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2a9.9 9.9 0 0 0-8.5 14.9L2 22l5.25-1.38A9.9 9.9 0 1 0 12.04 2Z"/></svg>
+              </span>
+              <a href={waUrl} target="_blank" rel="noopener noreferrer" class="hover:text-primary">WhatsApp</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="rounded-[var(--radius-card)] border border-border bg-white p-5 shadow-soft sm:p-6">
+          <h3 class="font-display text-xl text-primary-dark">{t.contact.hoursTitle}</h3>
+          <table class="mt-4 w-full text-left text-[0.95rem]">
+            <tbody>
+              <tr class="border-b border-border">
+                <th scope="row" class="py-2.5 font-medium text-ink">{t.contact.morning}</th>
+                <td class="py-2.5 text-right text-muted">09:30–12:30</td>
+              </tr>
+              <tr class="border-b border-border">
+                <th scope="row" class="py-2.5 font-medium text-ink">{t.contact.afternoon}</th>
+                <td class="py-2.5 text-right text-muted">14:00–18:00</td>
+              </tr>
+              <tr class="border-b border-border">
+                <th scope="row" class="py-2.5 font-medium text-ink">{t.contact.saturday}</th>
+                <td class="py-2.5 text-right text-muted">{t.contact.closed}</td>
+              </tr>
+              <tr>
+                <th scope="row" class="py-2.5 font-medium text-ink">{t.contact.sunday}</th>
+                <td class="py-2.5 text-right text-muted">{t.contact.closed}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="mt-3 text-sm text-muted">{t.contact.lunchNote}</p>
+        </div>
+
+        <a
+          href={site.mapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="group relative block overflow-hidden rounded-[var(--radius-card)] border border-border shadow-soft focus-visible:outline-offset-4"
+          aria-label={t.contact.mapAria}
+        >
+          <img
+            src="/images/map-static.svg"
+            alt={t.contact.mapAlt}
+            width="800"
+            height="420"
+            loading="lazy"
+            decoding="async"
+            class="h-52 w-full object-cover transition-transform duration-300 group-hover:scale-[1.02] md:h-56"
+          />
+          <span class="absolute bottom-4 left-4 rounded-lg bg-white/95 px-3 py-2 text-sm font-semibold text-primary shadow-soft">
+            {t.contact.mapCta}
+          </span>
+        </a>
+      </div>
+
+      <div class="fade-up rounded-[var(--radius-card)] border border-border bg-white p-5 shadow-soft sm:p-6 md:p-8">
+        <h3 class="font-display text-xl text-primary-dark">{t.contact.formTitle}</h3>
+        <p class="mt-2 text-sm text-muted">{t.contact.formGate}</p>
+        <p class="mt-2 text-sm text-muted">{t.contact.formNoClinical}</p>
+
+        <form
+          id="contact-form"
+          class="mt-6 space-y-4"
+          action="https://api.web3forms.com/submit"
+          method="POST"
+          data-msg-sending={t.contact.sending}
+          data-msg-success={t.contact.success}
+          data-msg-error={t.contact.error}
+        >
+          <input type="hidden" name="access_key" value={web3formsKey} />
+          <input type="hidden" name="subject" value={t.contact.formSubject} />
+          <input type="hidden" name="from_name" value="Website Nunes Monteiro" />
+          <input type="checkbox" name="botcheck" class="hidden" tabindex="-1" autocomplete="off" />
+
+          <div>
+            <label for="nome" class="mb-1.5 block text-sm font-medium text-ink">{t.contact.name}</label>
+            <input
+              type="text"
+              id="nome"
+              name="name"
+              required
+              autocomplete="name"
+              class="w-full rounded-lg border border-border bg-white px-3.5 py-3 text-base text-ink transition-colors placeholder:text-muted/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              placeholder={t.contact.namePh}
+            />
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label for="telefone" class="mb-1.5 block text-sm font-medium text-ink">{t.contact.phone}</label>
+              <input
+                type="tel"
+                id="telefone"
+                name="phone"
+                required
+                autocomplete="tel"
+                class="w-full rounded-lg border border-border bg-white px-3.5 py-3 text-base text-ink transition-colors placeholder:text-muted/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder={t.contact.phonePh}
+              />
+            </div>
+            <div>
+              <label for="email" class="mb-1.5 block text-sm font-medium text-ink">{t.contact.email}</label>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                required
+                autocomplete="email"
+                class="w-full rounded-lg border border-border bg-white px-3.5 py-3 text-base text-ink transition-colors placeholder:text-muted/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder={t.contact.emailPh}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label for="assunto" class="mb-1.5 block text-sm font-medium text-ink">{t.contact.subject}</label>
+            <select
+              id="assunto"
+              name="assunto"
+              required
+              class="w-full rounded-lg border border-border bg-white px-3.5 py-3 text-base text-ink transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">{t.contact.subjectPh}</option>
+              <option value={t.contact.subjectBooking}>{t.contact.subjectBooking}</option>
+              <option value={t.contact.subjectEmergency}>{t.contact.subjectEmergency}</option>
+              <option value={t.contact.subjectInfo}>{t.contact.subjectInfo}</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="mensagem" class="mb-1.5 block text-sm font-medium text-ink">{t.contact.message}</label>
+            <textarea
+              id="mensagem"
+              name="message"
+              required
+              rows="4"
+              class="w-full resize-y rounded-lg border border-border bg-white px-3.5 py-3 text-base text-ink transition-colors placeholder:text-muted/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              placeholder={t.contact.messagePh}
+            ></textarea>
+          </div>
+
+          <div class="flex items-start gap-3">
+            <input
+              type="checkbox"
+              id="rgpd"
+              name="rgpd"
+              required
+              class="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+            />
+            <label for="rgpd" class="text-sm text-muted">
+              {t.contact.consentBefore}
+              <a href={localizePath(lang, '/politica-de-privacidade')} class="font-medium text-primary underline-offset-2 hover:underline">
+                {t.contact.privacyLink}
+              </a>
+              {t.contact.consentAfter}
+            </label>
+          </div>
+
+          <button
+            type="submit"
+            class="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-primary px-6 text-base font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
+          >
+            {t.contact.submit}
+          </button>
+
+          <p id="form-status" class="hidden text-sm" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>

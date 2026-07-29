@@ -1,0 +1,75 @@
+# Kids 0-18 Integrative Pediatrics — CRM Project Rules
+
+## Tech Stack
+- Framework: Next.js 16.2.6 (App Router) — HAS BREAKING CHANGES, read node_modules/next/dist/docs/ before writing Next.js code
+- Language: TypeScript 5, React 19.2.4
+- Auth: NextAuth (Auth.js) v5 beta — Credentials provider + JWT sessions
+- ORM: Prisma 7.8 → PostgreSQL on Supabase (pooler). Client at lib/generated/prisma
+- Styling: Tailwind CSS v4 + shadcn/ui + Radix. Use class-variance-authority + tailwind-merge
+- Icons: lucide-react (ONLY — no other icon libraries)
+- Charts: recharts 3
+- Forms: react-hook-form + zod 4 + @hookform/resolvers
+- Background jobs: BullMQ 5 + ioredis → Redis
+- Email: Gmail API → SendGrid → SMTP/nodemailer (priority cascade)
+- Testing: Vitest 4
+
+## Critical Rules
+1. ALWAYS check what already exists in the codebase before suggesting new implementations
+2. Use the existing Prisma singleton from lib/prisma.ts — NEVER create a new PrismaClient instance
+3. Use shadcn/ui components from components/ui/ — NEVER install new UI libraries
+4. Follow existing snake_case table/column mapping in Prisma schema
+5. All new pages go under app/(dashboard)/ and use the existing layout (sidebar + header)
+6. All API routes follow existing patterns in app/api/ — check a similar route first
+7. Never modify auth.ts, auth.config.ts, or proxy.ts without explicit instruction
+8. Encryption uses lib/crypto.ts — use it for any PII/PHI storage
+9. Settings are stored in the singleton Settings table — never create new config tables
+10. Notifications use the existing Notification model — just add new types
+
+## File Structure
+```
+pediatric-practice-kid/
+├── app/(dashboard)/        → authenticated CRM pages (sidebar layout)
+├── app/(portal)/           → patient portal pages (minimal layout, NO sidebar)
+├── app/api/                → REST API routes
+├── app/login/              → public login page
+├── components/             → React components (ui/ = shadcn primitives)
+├── components/messaging/   → messaging module components
+├── components/portal/      → patient portal components
+├── lib/                    → business logic & helpers
+├── lib/messaging/          → messaging domain logic
+├── lib/generated/prisma/   → generated Prisma client (DO NOT EDIT)
+├── services/               → background job processors
+├── prisma/                 → schema + migrations
+├── types/                  → TypeScript type augmentations
+├── worker.ts               → email + message worker entrypoint
+└── proxy.ts                → edge middleware (route protection)
+```
+
+## Database Conventions
+- UUID primary keys (@default(uuid()))
+- DateTime fields with @default(now()) and @updatedAt
+- snake_case mapping: @@map("table_name") and @map("column_name")
+- Cascade deletes for parent-child: onDelete: Cascade
+- JSON fields for flexible config (typed with Zod at runtime)
+- Encrypted fields use lib/crypto.ts encrypt/decrypt
+
+## Component Conventions
+- Use shadcn/ui primitives: Button, Card, Input, Dialog, Sheet, Table, Badge, etc.
+- Tailwind classes only — no inline styles, no CSS modules
+- Form components use react-hook-form + zod resolver
+- Loading states use Skeleton components
+- Toast notifications via sonner (already configured)
+- Data tables follow the pattern in patients/page.tsx
+
+## API Route Conventions
+- GET for list/detail, POST for create, PATCH for update, DELETE for remove
+- Validate request body with zod schemas
+- Return NextResponse.json() with appropriate status codes
+- Auth check: import { auth } from "@/auth" and validate session
+- Error responses: { error: string } with 400/401/403/404/500
+- Audit log writes for HIPAA-sensitive operations
+
+## Current Modules (DO NOT break these)
+Dashboard, Patients, Appointments, Call Logs, Chat Logs, Intake Forms,
+Patient Drafts, Email Campaigns, Email Automation, Staff, Reports,
+Notifications, Settings (14 tabs)

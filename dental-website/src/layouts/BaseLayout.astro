@@ -1,0 +1,87 @@
+---
+import '../styles/global.css';
+import { site } from '../data/site';
+import {
+  type Lang,
+  defaultLang,
+  htmlLang,
+  ogLocale,
+  hreflang,
+  useTranslations,
+  getRouteFromUrl,
+  absoluteUrl,
+  getAlternateUrls,
+} from '../i18n';
+
+interface Props {
+  lang?: Lang;
+  title?: string;
+  description?: string;
+  ogImage?: string;
+}
+
+const lang = Astro.props.lang ?? defaultLang;
+const t = useTranslations(lang);
+const route = getRouteFromUrl(Astro.url);
+const canonical = absoluteUrl(lang, route);
+const alternates = getAlternateUrls(route);
+
+const {
+  title = t.meta.title,
+  description = t.meta.description,
+  ogImage = `${site.url}/og-image.svg`,
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang={htmlLang[lang]}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    {
+      alternates.map(({ lang: l, href }) => (
+        <link rel="alternate" hreflang={hreflang[l]} href={href} />
+      ))
+    }
+    <link rel="alternate" hreflang="x-default" href={absoluteUrl(defaultLang, route)} />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="theme-color" content="#0E5C63" />
+    <meta name="geo.region" content="PT-11" />
+    <meta name="geo.placename" content="Malveira" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content={ogLocale[lang]} />
+    {
+      (['pt', 'en', 'es'] as const)
+        .filter((l) => l !== lang)
+        .map((l) => <meta property="og:locale:alternate" content={ogLocale[l]} />)
+    }
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <slot name="head" />
+  </head>
+  <body class="min-h-screen pb-20 md:pb-0" data-lang={lang}>
+    <a
+      href="#conteudo"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-primary focus:shadow-soft"
+    >
+      {t.a11y.skip}
+    </a>
+    <slot />
+    <script>
+      import '../scripts/main.ts';
+    </script>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#083E43"/>
+  <rect x="0" y="0" width="1200" height="630" fill="url(#g)" />
+  <defs>
+    <radialGradient id="g" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(280 180) rotate(55) scale(900 600)">
+      <stop stop-color="#0E5C63"/>
+      <stop offset="1" stop-color="#083E43" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="80" y="80" width="72" height="72" rx="18" fill="#0E5C63"/>
+  <path d="M116 96c-6.5 0-11.8 5.6-11.8 12.5 0 5.1 2.6 9.5 6.3 12.8-.9 4.2-2.8 7.9-5.6 11 4.2-.7 8.1-2.6 11.1-5.4 3 2.8 6.9 4.7 11.1 5.4-2.8-3.1-4.7-6.8-5.6-11 3.7-3.3 6.3-7.7 6.3-12.8 0-6.9-5.3-12.5-11.8-12.5Z" fill="#C9A227"/>
+  <text x="180" y="128" fill="#FFFFFF" font-family="Georgia, serif" font-size="42" font-weight="600">Nunes Monteiro</text>
+  <text x="180" y="158" fill="#C9A227" font-family="system-ui, sans-serif" font-size="16" letter-spacing="3" font-weight="600">CL�NICA DENT�RIA</text>
+  <text x="80" y="320" fill="#FFFFFF" font-family="Georgia, serif" font-size="56" font-weight="600">Dentista na Malveira</text>
+  <text x="80" y="380" fill="#D8E2E3" font-family="system-ui, sans-serif" font-size="26">Urg�ncias � Implantes � Ortodontia � Est�tica</text>
+  <text x="80" y="520" fill="#C9A227" font-family="system-ui, sans-serif" font-size="22" font-weight="600">928 494 871</text>
+  <text x="80" y="560" fill="#9BB0B2" font-family="system-ui, sans-serif" font-size="18">SegSex � 09:3012:30 � 14:0018:00</text>
+</svg>

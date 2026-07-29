@@ -1,0 +1,115 @@
+---
+import Logo from './Logo.astro';
+import LanguageSwitcher from './LanguageSwitcher.astro';
+import type { Lang } from '../i18n';
+import { localizePath, useTranslations } from '../i18n';
+import { site } from '../data/site';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+const home = localizePath(lang, '/');
+
+const nav = [
+  { href: `${home}#inicio`, label: t.nav.home },
+  { href: `${home}#servicos`, label: t.nav.services },
+  { href: `${home}#sobre`, label: t.nav.about },
+  { href: `${home}#precos`, label: t.nav.pricing },
+  { href: `${home}#faq`, label: t.nav.faq },
+  { href: `${home}#contactos`, label: t.nav.contact },
+];
+---
+
+<header
+  id="site-header"
+  class="fixed inset-x-0 top-0 z-50 border-b border-transparent bg-white/95 backdrop-blur-md transition-[border-color,box-shadow] duration-300"
+>
+  <!-- Mobile: logo + menu only. Desktop: full nav + lang + CTA -->
+  <div class="container-site flex h-16 items-center justify-between gap-3 md:h-[4.5rem] lg:h-20">
+    <Logo lang={lang} layout="header" />
+
+    <nav class="hidden items-center gap-0.5 lg:flex" aria-label={t.a11y.mainNav}>
+      {
+        nav.map((item) => (
+          <a
+            href={item.href}
+            class="rounded-lg px-3 py-2 text-[0.95rem] font-medium text-muted transition-colors hover:text-primary"
+          >
+            {item.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="flex shrink-0 items-center gap-2">
+      <div class="hidden lg:block">
+        <LanguageSwitcher lang={lang} />
+      </div>
+
+      <a
+        href={`${home}#contactos`}
+        class="hidden rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark lg:inline-flex"
+      >
+        {t.nav.book}
+      </a>
+
+      <button
+        type="button"
+        id="nav-toggle"
+        class="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-border text-primary lg:hidden"
+        aria-controls="mobile-nav"
+        aria-expanded="false"
+        aria-label={t.a11y.openMenu}
+        data-label-open={t.a11y.openMenu}
+        data-label-close={t.a11y.closeMenu}
+      >
+        <svg id="icon-open" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round" />
+        </svg>
+        <svg id="icon-close" class="hidden h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div
+    id="mobile-nav"
+    class="max-h-[min(100dvh-3.5rem,32rem)] overflow-y-auto border-t border-border bg-white lg:hidden"
+    hidden
+  >
+    <nav class="container-site flex flex-col gap-0.5 py-3 pb-5" aria-label={t.a11y.mobileNav}>
+      {
+        nav.map((item) => (
+          <a
+            href={item.href}
+            class="mobile-nav-link rounded-lg px-3 py-3.5 text-base font-medium text-ink transition-colors hover:bg-primary-soft hover:text-primary"
+          >
+            {item.label}
+          </a>
+        ))
+      }
+
+      <div class="mt-2 flex items-center justify-between gap-3 border-t border-border px-1 pt-4">
+        <p class="text-xs font-semibold uppercase tracking-[0.14em] text-muted">{t.a11y.langSwitch}</p>
+        <LanguageSwitcher lang={lang} dense />
+      </div>
+
+      <a
+        href={`${home}#contactos`}
+        class="mobile-nav-link mt-3 inline-flex min-h-12 items-center justify-center rounded-lg bg-primary px-3 text-center text-base font-semibold text-white"
+      >
+        {t.nav.book}
+      </a>
+      <a
+        href={`tel:${site.phoneTel}`}
+        class="mobile-nav-link mt-2 inline-flex min-h-12 items-center justify-center rounded-lg border border-border px-3 text-center text-base font-semibold text-primary"
+      >
+        {t.nav.call} {site.phoneDisplay}
+      </a>
+    </nav>
+  </div>
+</header>

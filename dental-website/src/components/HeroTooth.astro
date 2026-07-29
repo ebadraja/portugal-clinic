@@ -1,0 +1,207 @@
+---
+import heroAvif from '../assets/hero-tooth.avif';
+import heroWebp from '../assets/hero-tooth.webp';
+import heroPng from '../assets/hero-tooth.png';
+
+interface Props {
+  class?: string;
+}
+
+const { class: className = '' } = Astro.props;
+
+/** Intrinsic size after resize-to-900 export */
+const width = 900;
+const height = 490;
+---
+
+<div class:list={['hero-tooth', className]} aria-hidden="true">
+  <div class="hero-tooth__stage">
+    <div class="hero-tooth__float">
+      <div class="hero-tooth__breath">
+        <!-- Soft glow behind — no square plate -->
+        <div class="hero-tooth__glow"></div>
+
+        <div class="hero-tooth__frame">
+          <picture class="hero-tooth__picture">
+            <source srcset={heroAvif.src} type="image/avif" />
+            <source srcset={heroWebp.src} type="image/webp" />
+            <img
+              src={heroPng.src}
+              alt=""
+              width={width}
+              height={height}
+              loading="eager"
+              fetchpriority="high"
+              decoding="async"
+              class="hero-tooth__img"
+              draggable="false"
+            />
+          </picture>
+
+          <div class="hero-tooth__dots">
+            <span class="hero-tooth__dot hero-tooth__dot--1"></span>
+            <span class="hero-tooth__dot hero-tooth__dot--2"></span>
+            <span class="hero-tooth__dot hero-tooth__dot--3"></span>
+            <span class="hero-tooth__dot hero-tooth__dot--4"></span>
+            <span class="hero-tooth__dot hero-tooth__dot--5"></span>
+            <span class="hero-tooth__dot hero-tooth__dot--6"></span>
+            <span class="hero-tooth__dot hero-tooth__dot--7"></span>
+            <span class="hero-tooth__dot hero-tooth__dot--8"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .hero-tooth {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+  }
+
+  .hero-tooth__stage {
+    position: relative;
+    width: 100%;
+  }
+
+  .hero-tooth__float,
+  .hero-tooth__breath {
+    position: relative;
+    width: 100%;
+  }
+
+  .hero-tooth__glow {
+    pointer-events: none;
+    position: absolute;
+    inset: 8% 12%;
+    z-index: 0;
+    border-radius: 50%;
+    background:
+      radial-gradient(ellipse 55% 50% at 50% 42%, rgb(201 162 39 / 0.22) 0%, transparent 58%),
+      radial-gradient(ellipse 70% 65% at 50% 52%, rgb(14 92 99 / 0.45) 0%, rgb(14 92 99 / 0.12) 45%, transparent 72%);
+    filter: blur(18px);
+  }
+
+  .hero-tooth__frame {
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+  }
+
+  .hero-tooth__picture {
+    display: block;
+    width: 100%;
+  }
+
+  .hero-tooth__img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: 900px;
+  }
+
+  .hero-tooth__dots {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+  }
+
+  .hero-tooth__dot {
+    position: absolute;
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: #c9a227;
+    opacity: 0;
+  }
+
+  .hero-tooth__dot--1 { left: 38%; top: 58%; width: 4px; height: 4px; }
+  .hero-tooth__dot--2 { left: 46%; top: 62%; width: 6px; height: 6px; }
+  .hero-tooth__dot--3 { left: 52%; top: 56%; width: 4px; height: 4px; }
+  .hero-tooth__dot--4 { left: 58%; top: 64%; width: 5px; height: 5px; }
+  .hero-tooth__dot--5 { left: 42%; top: 68%; width: 3px; height: 3px; }
+  .hero-tooth__dot--6 { left: 55%; top: 70%; width: 5px; height: 5px; }
+  .hero-tooth__dot--7 { left: 48%; top: 74%; width: 4px; height: 4px; }
+  .hero-tooth__dot--8 { left: 61%; top: 60%; width: 3px; height: 3px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-tooth__stage {
+      animation: hero-tooth-enter 900ms ease-out both;
+    }
+
+    .hero-tooth__float {
+      animation: hero-tooth-float 8s ease-in-out infinite;
+    }
+
+    .hero-tooth__breath {
+      animation: hero-tooth-breath 6s ease-in-out infinite;
+      animation-delay: -3s;
+    }
+
+    .hero-tooth__dot {
+      animation-name: hero-tooth-drift;
+      animation-timing-function: linear;
+      animation-iteration-count: infinite;
+    }
+
+    .hero-tooth__dot--1 { animation-duration: 9s; animation-delay: 0s; }
+    .hero-tooth__dot--2 { animation-duration: 11s; animation-delay: 1.1s; }
+    .hero-tooth__dot--3 { animation-duration: 13s; animation-delay: 2.3s; }
+    .hero-tooth__dot--4 { animation-duration: 10s; animation-delay: 0.7s; }
+    .hero-tooth__dot--5 { animation-duration: 14s; animation-delay: 3.2s; }
+    .hero-tooth__dot--6 { animation-duration: 12s; animation-delay: 4.4s; }
+    .hero-tooth__dot--7 { animation-duration: 9.5s; animation-delay: 1.8s; }
+    .hero-tooth__dot--8 { animation-duration: 13.5s; animation-delay: 5.1s; }
+  }
+
+  @keyframes hero-tooth-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes hero-tooth-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-12px);
+    }
+  }
+
+  @keyframes hero-tooth-breath {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.015);
+    }
+  }
+
+  @keyframes hero-tooth-drift {
+    0% {
+      transform: translateY(0);
+      opacity: 0;
+    }
+    12% {
+      opacity: 0.7;
+    }
+    70% {
+      opacity: 0.25;
+    }
+    100% {
+      transform: translateY(-110px);
+      opacity: 0;
+    }
+  }
+</style>

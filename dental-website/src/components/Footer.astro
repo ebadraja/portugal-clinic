@@ -1,0 +1,67 @@
+---
+import Logo from './Logo.astro';
+import type { Lang } from '../i18n';
+import { localizePath, useTranslations } from '../i18n';
+import { site } from '../data/site';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+---
+
+<footer class="bg-primary-dark text-white">
+  <div class="container-site section-pad !pb-10 !pt-14">
+    <div class="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr]">
+      <div>
+        <Logo lang={lang} variant="light" layout="stacked" />
+        <p class="mt-5 max-w-sm text-[0.95rem] leading-relaxed text-white/70">
+          {t.footer.blurb}
+        </p>
+      </div>
+
+      <div>
+        <h2 class="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-accent">{t.footer.contacts}</h2>
+        <ul class="mt-4 space-y-3 text-[0.95rem] text-white/80">
+          <li>
+            <a href={site.mapsUrl} target="_blank" rel="noopener noreferrer" class="hover:text-white">
+              {site.address.full}
+            </a>
+          </li>
+          <li>
+            <a href={`tel:${site.phoneTel}`} class="hover:text-white">{site.phoneDisplay}</a>
+          </li>
+          <li>
+            <a href={`mailto:${site.email}`} class="hover:text-white">{site.email}</a>
+          </li>
+        </ul>
+      </div>
+
+      <div>
+        <h2 class="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-accent">{t.footer.info}</h2>
+        <ul class="mt-4 space-y-3 text-[0.95rem] text-white/80">
+          <li>
+            <a href={localizePath(lang, '/politica-de-privacidade')} class="hover:text-white">{t.footer.privacy}</a>
+          </li>
+          <li>
+            <a href={localizePath(lang, '/termos')} class="hover:text-white">{t.footer.terms}</a>
+          </li>
+          <li>
+            <a href={localizePath(lang, '/livro-de-reclamacoes')} class="hover:text-white">{t.footer.livro}</a>
+          </li>
+        </ul>
+        <dl class="mt-6 space-y-1 text-sm text-white/55">
+          <div class="flex gap-2"><dt>NIF</dt><dd>{site.nif}</dd></div>
+          <div class="flex gap-2"><dt>ERS</dt><dd>{site.ers}</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <div class="mt-12 flex flex-col gap-2 border-t border-white/10 pt-6 text-sm text-white/50 sm:flex-row sm:items-center sm:justify-between">
+      <p>© 2026 {site.name}</p>
+      <p>{t.footer.hoursStrip}</p>
+    </div>
+  </div>
+</footer>

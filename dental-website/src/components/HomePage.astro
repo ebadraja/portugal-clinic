@@ -1,0 +1,106 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Header from './Header.astro';
+import Footer from './Footer.astro';
+import MobileActionBar from './MobileActionBar.astro';
+import Hero from './sections/Hero.astro';
+import Services from './sections/Services.astro';
+import About from './sections/About.astro';
+import Pricing from './sections/Pricing.astro';
+import Emergencies from './sections/Emergencies.astro';
+import FAQ from './sections/FAQ.astro';
+import Contact from './sections/Contact.astro';
+import type { Lang } from '../i18n';
+import { absoluteUrl, schemaLang, useTranslations } from '../i18n';
+import { site } from '../data/site';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+const pageUrl = absoluteUrl(lang, '/');
+
+const dentistLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Dentist',
+  '@id': `${pageUrl}#dentist`,
+  name: site.name,
+  url: pageUrl,
+  inLanguage: schemaLang[lang],
+  telephone: site.phoneTel,
+  email: site.email,
+  image: `${site.url}/og-image.svg`,
+  priceRange: '€€',
+  address: {
+    '@type': 'PostalAddress',
+    streetAddress: site.address.street,
+    addressLocality: site.address.locality,
+    addressRegion: site.address.region,
+    postalCode: site.address.postalCode,
+    addressCountry: site.address.country,
+  },
+  geo: {
+    '@type': 'GeoCoordinates',
+    latitude: site.geo.latitude,
+    longitude: site.geo.longitude,
+  },
+  openingHoursSpecification: [
+    {
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      opens: site.hours.morning.opens,
+      closes: site.hours.morning.closes,
+    },
+    {
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      opens: site.hours.afternoon.opens,
+      closes: site.hours.afternoon.closes,
+    },
+  ],
+  availableLanguage: ['Portuguese', 'English', 'Spanish'],
+  medicalSpecialty: [
+    'Dentistry',
+    'OralSurgery',
+    'Orthodontics',
+    'Endodontics',
+    'CosmeticDentistry',
+  ],
+};
+
+const faqLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  inLanguage: schemaLang[lang],
+  mainEntity: t.faq.items.map((item) => ({
+    '@type': 'Question',
+    name: item.q,
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: item.a,
+    },
+  })),
+};
+---
+
+<BaseLayout lang={lang} title={t.meta.title} description={t.meta.description}>
+  <Fragment slot="head">
+    <script type="application/ld+json" set:html={JSON.stringify(dentistLd)} />
+    <script type="application/ld+json" set:html={JSON.stringify(faqLd)} />
+  </Fragment>
+
+  <Header lang={lang} />
+  <main id="conteudo">
+    <Hero lang={lang} />
+    <Services lang={lang} />
+    <About lang={lang} />
+    <Pricing lang={lang} />
+    <Emergencies lang={lang} />
+    <FAQ lang={lang} />
+    <Contact lang={lang} />
+  </main>
+  <Footer lang={lang} />
+  <MobileActionBar lang={lang} />
+</BaseLayout>

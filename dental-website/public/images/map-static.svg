@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420" viewBox="0 0 800 420" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="800" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E8F2F3"/>
+      <stop offset="1" stop-color="#D5E6E8"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="420" fill="url(#bg)"/>
+  <!-- Soft street grid suggestion -->
+  <path d="M0 290 H800" stroke="#B7CBCE" stroke-width="18"/>
+  <path d="M120 0 V420" stroke="#C5D6D8" stroke-width="10"/>
+  <path d="M520 0 V420" stroke="#C5D6D8" stroke-width="8"/>
+  <path d="M0 140 H800" stroke="#C5D6D8" stroke-width="6"/>
+  <!-- Blocks -->
+  <rect x="40" y="160" width="90" height="110" rx="4" fill="#F7F9F9" stroke="#A9C0C3"/>
+  <rect x="160" y="180" width="120" height="90" rx="4" fill="#F7F9F9" stroke="#A9C0C3"/>
+  <rect x="560" y="150" width="100" height="120" rx="4" fill="#F7F9F9" stroke="#A9C0C3"/>
+  <rect x="680" y="190" width="80" height="80" rx="4" fill="#F7F9F9" stroke="#A9C0C3"/>
+  <!-- Clinic pin -->
+  <g transform="translate(360 150)">
+    <path d="M40 0c22 0 40 17.5 40 39 0 28-40 71-40 71S0 67 0 39C0 17.5 18 0 40 0Z" fill="#0E5C63"/>
+    <circle cx="40" cy="36" r="14" fill="#C9A227"/>
+  </g>
+  <rect x="250" y="340" width="300" height="44" rx="10" fill="#083E43" fill-opacity="0.88"/>
+  <text x="400" y="368" text-anchor="middle" fill="#FFFFFF" font-family="system-ui, sans-serif" font-size="15" font-weight="600">Rua Miguel Judicibus Ferreira 29A, Malveira</text>
+</svg>

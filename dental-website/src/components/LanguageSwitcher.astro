@@ -1,0 +1,67 @@
+---
+import type { Lang } from '../i18n';
+import { hreflang, languages, languageLabels, switchLangPath, useTranslations } from '../i18n';
+
+interface Props {
+  lang: Lang;
+  class?: string;
+  /** Larger tap targets for the mobile drawer */
+  dense?: boolean;
+}
+
+const { lang, class: className = '', dense = false } = Astro.props;
+const t = useTranslations(lang);
+---
+
+<nav
+  class:list={[
+    'lang-switcher inline-flex items-center',
+    dense ? 'gap-1' : 'gap-1.5',
+    'text-sm',
+    className,
+  ]}
+  aria-label={t.a11y.langSwitch}
+>
+  {
+    languages.flatMap((code, i) => {
+      const href = switchLangPath(Astro.url, code);
+      const current = code === lang;
+      const nodes = [];
+      if (i > 0) {
+        nodes.push(
+          <span class="select-none text-border" aria-hidden="true">
+            ·
+          </span>,
+        );
+      }
+      if (current) {
+        nodes.push(
+          <span
+            class:list={[
+              'font-semibold text-primary',
+              dense && 'inline-flex min-h-11 min-w-11 items-center justify-center',
+            ]}
+            aria-current="page"
+          >
+            {languageLabels[code]}
+          </span>,
+        );
+      } else {
+        nodes.push(
+          <a
+            href={href}
+            class:list={[
+              'lang-link font-medium text-muted transition-colors hover:text-primary',
+              dense && 'inline-flex min-h-11 min-w-11 items-center justify-center',
+            ]}
+            hreflang={hreflang[code]}
+            lang={hreflang[code]}
+          >
+            {languageLabels[code]}
+          </a>,
+        );
+      }
+      return nodes;
+    })
+  }
+</nav>

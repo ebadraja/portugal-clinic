@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GIGI Chatbot — embed test</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+    code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Webflow embed test</h1>
+  <p>
+    This page mimics your Webflow site loading GIGI from the CRM server.
+    You should see a purple giraffe bubble bottom-right.
+  </p>
+  <p>Open DevTools → Console for <code>[GIGI] Widget mounted</code>.</p>
+  <p>Network tab: <code>gigi-chatbot.js</code> must be <strong>JavaScript</strong>, not HTML login page.</p>
+
+  <!-- Same tag as Webflow footer — data-api-url optional if script is hosted on CRM -->
+  <script
+    src="https://app.kids0218.com/gigi-chatbot.js"
+    data-api-url="https://app.kids0218.com"
+    defer>
+  </script>
+</body>
+</html>

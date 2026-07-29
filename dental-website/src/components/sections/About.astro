@@ -1,0 +1,56 @@
+---
+import type { Lang } from '../../i18n';
+import { useTranslations } from '../../i18n';
+import { site } from '../../data/site';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+---
+
+<section id="sobre" class="section-pad bg-surface" aria-labelledby="sobre-title">
+  <div class="container-site">
+    <div class="grid items-start gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16">
+      <div class="fade-up">
+        <p class="text-sm font-semibold uppercase tracking-[0.16em] text-accent">{t.about.eyebrow}</p>
+        <h2 id="sobre-title" class="mt-3 text-2xl text-primary-dark sm:text-3xl md:text-4xl">
+          {t.about.title}
+        </h2>
+        <div class="mt-6 space-y-4 text-muted">
+          <p>{t.about.p1}</p>
+          <p>{t.about.p2}</p>
+        </div>
+
+        <ul class="mt-8 grid gap-3 sm:grid-cols-3">
+          <li class="rounded-[var(--radius-card)] border border-border bg-white px-4 py-4 text-center shadow-soft">
+            <p class="text-sm font-semibold text-primary-dark">{t.about.ersLabel}</p>
+            <p class="mt-1 text-xs text-muted">{site.ers}</p>
+          </li>
+          <li class="rounded-[var(--radius-card)] border border-border bg-white px-4 py-4 text-center shadow-soft">
+            <p class="text-sm font-semibold text-primary-dark">{t.about.omdLabel}</p>
+            <p class="mt-1 text-xs text-muted">OMD {site.omd}</p>
+          </li>
+          <li class="rounded-[var(--radius-card)] border border-border bg-white px-4 py-4 text-center shadow-soft">
+            <p class="text-sm font-semibold text-primary-dark">{t.about.consultLabel}</p>
+            <p class="mt-1 text-xs text-muted">PT · EN · ES</p>
+          </li>
+        </ul>
+      </div>
+
+      <aside class="fade-up rounded-[var(--radius-card)] border border-border bg-white p-5 shadow-soft sm:p-7 lg:mt-10">
+        <div class="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary-soft font-display text-2xl text-primary">
+          AN
+        </div>
+        <h3 class="font-display text-2xl text-primary-dark">Dra. Ana Nunes</h3>
+        <p class="mt-1 text-sm font-medium text-accent">{t.about.doctorRole}</p>
+        <p class="mt-4 text-[0.95rem] leading-relaxed text-muted">
+          {t.about.doctorBio}
+          <span class="whitespace-nowrap">{site.omd}</span>.
+        </p>
+      </aside>
+    </div>
+  </div>
+</section>

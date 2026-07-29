@@ -1,0 +1,59 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Header from './Header.astro';
+import Footer from './Footer.astro';
+import MobileActionBar from './MobileActionBar.astro';
+import type { Lang } from '../i18n';
+import { absoluteUrl, getPrivacySections, useTranslations } from '../i18n';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+const sections = getPrivacySections(lang);
+const path = '/politica-de-privacidade';
+
+const breadcrumbLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: t.nav.home, item: absoluteUrl(lang, '/') },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: t.legal.privacyHeading,
+      item: absoluteUrl(lang, path),
+    },
+  ],
+};
+---
+
+<BaseLayout lang={lang} title={t.meta.privacyTitle} description={t.meta.privacyDescription}>
+  <Fragment slot="head">
+    <script type="application/ld+json" set:html={JSON.stringify(breadcrumbLd)} />
+  </Fragment>
+
+  <Header lang={lang} />
+  <main id="conteudo" class="section-pad pt-28 md:pt-32">
+    <article class="container-site max-w-3xl">
+      <p class="text-sm font-semibold uppercase tracking-[0.16em] text-accent">{t.legal.eyebrow}</p>
+      <h1 class="mt-3 text-3xl text-primary-dark md:text-4xl">{t.legal.privacyHeading}</h1>
+      <p class="mt-4 text-sm text-muted">{t.legal.updated}</p>
+
+      <div class="mt-10 space-y-8 text-[0.95rem] leading-relaxed text-muted">
+        {
+          sections.map((section) => (
+            <section>
+              <h2 class="font-display text-2xl text-primary-dark">{section.heading}</h2>
+              <div class="prose-legal mt-3 [&_a]:text-primary [&_a]:underline-offset-2 hover:[&_a]:underline [&_strong]:font-medium [&_strong]:text-ink [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-5 [&_p]:mt-3" set:html={section.html} />
+            </section>
+          ))
+        }
+      </div>
+    </article>
+  </main>
+  <Footer lang={lang} />
+  <MobileActionBar lang={lang} />
+</BaseLayout>

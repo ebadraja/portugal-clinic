@@ -1,0 +1,58 @@
+---
+import type { Lang } from '../../i18n';
+import { useTranslations } from '../../i18n';
+import { site } from '../../data/site';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+---
+
+<section id="precos" class="section-pad bg-white" aria-labelledby="precos-title">
+  <div class="container-site">
+    <div class="fade-up mx-auto max-w-2xl text-center">
+      <p class="text-sm font-semibold uppercase tracking-[0.16em] text-accent">{t.pricing.eyebrow}</p>
+      <h2 id="precos-title" class="mt-3 text-2xl text-primary-dark sm:text-3xl md:text-4xl">
+        {t.pricing.title}
+      </h2>
+    </div>
+
+    <div class="fade-up mx-auto mt-12 grid max-w-3xl gap-4 sm:grid-cols-2">
+      <div class="rounded-[var(--radius-card)] border border-border bg-surface p-6 text-center shadow-soft">
+        <p class="text-sm font-medium uppercase tracking-wide text-muted">{t.pricing.evaluation}</p>
+        <p class="mt-3 font-display text-3xl text-primary-dark sm:text-4xl">{site.evaluationPrice}</p>
+      </div>
+      <div class="rounded-[var(--radius-card)] border border-border bg-surface p-6 text-center shadow-soft">
+        <p class="text-sm font-medium uppercase tracking-wide text-muted">{t.pricing.hygiene}</p>
+        <p class="mt-3 font-display text-3xl text-primary-dark sm:text-4xl">{t.pricing.hygieneFrom}</p>
+      </div>
+    </div>
+
+    <p class="fade-up mx-auto mt-6 max-w-3xl text-center text-[0.95rem] text-muted">
+      {t.pricing.disclaimer}
+    </p>
+
+    <div class="fade-up mx-auto mt-12 grid max-w-4xl gap-8 border-t border-border pt-10 md:grid-cols-3">
+      <div>
+        <h3 class="font-display text-xl text-primary-dark">{t.pricing.paymentTitle}</h3>
+        <ul class="mt-3 space-y-2 text-[0.95rem] text-muted">
+          {t.pricing.paymentMethods.map((item) => <li>{item}</li>)}
+        </ul>
+      </div>
+      <div>
+        <h3 class="font-display text-xl text-primary-dark">{t.pricing.instalmentsTitle}</h3>
+        <p class="mt-3 text-[0.95rem] text-muted">{t.pricing.instalments}</p>
+      </div>
+      <div>
+        <h3 class="font-display text-xl text-primary-dark">{t.pricing.insurersTitle}</h3>
+        <ul class="mt-3 space-y-2 text-[0.95rem] text-muted">
+          {t.pricing.insurers.map((item) => <li>{item}</li>)}
+        </ul>
+        <p class="mt-4 text-[0.95rem] font-medium text-ink">{t.pricing.noCheque}</p>
+      </div>
+    </div>
+  </div>
+</section>

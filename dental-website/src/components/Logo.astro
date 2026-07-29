@@ -1,0 +1,124 @@
+---
+import type { Lang } from '../i18n';
+import { localizePath, useTranslations } from '../i18n';
+import { site } from '../data/site';
+import headerWebp from '../assets/logo-header.webp';
+import headerPng from '../assets/logo-header.png';
+import logoWebp from '../assets/logo.webp';
+import logoPng from '../assets/logo.png';
+
+interface Props {
+  lang: Lang;
+  class?: string;
+  variant?: 'light' | 'dark';
+  /** header = cropped lockup + wordmark; stacked = full square logo (footer) */
+  layout?: 'header' | 'stacked';
+}
+
+const {
+  lang,
+  class: className = '',
+  variant = 'dark',
+  layout = 'header',
+} = Astro.props;
+const t = useTranslations(lang);
+const isLight = variant === 'light';
+---
+
+{
+  layout === 'stacked' ? (
+    <a
+      href={localizePath(lang, '/') + '#inicio'}
+      class:list={['group inline-flex items-center no-underline', className]}
+      aria-label={t.a11y.homeLogo}
+    >
+      <picture>
+        <source srcset={logoWebp.src} type="image/webp" />
+        <img
+          src={logoPng.src}
+          alt="Clínica Dentária Nunes Monteiro"
+          width="431"
+          height="431"
+          class:list={[
+            'h-28 w-auto object-contain object-left sm:h-32',
+            isLight && 'brightness-0 invert',
+          ]}
+          decoding="async"
+          loading="lazy"
+        />
+      </picture>
+    </a>
+  ) : (
+    <a
+      href={localizePath(lang, '/') + '#inicio'}
+      class:list={[
+        'group inline-flex max-w-full min-w-0 items-center gap-2 no-underline sm:gap-2.5',
+        className,
+      ]}
+      aria-label={t.a11y.homeLogo}
+    >
+      <span class="logo-header relative inline-flex shrink-0 items-center overflow-hidden">
+        {!isLight && <span class="logo-header__flare" aria-hidden="true" />}
+        <picture class="relative z-[1]">
+          <source srcset={headerWebp.src} type="image/webp" />
+          <img
+            src={headerPng.src}
+            alt=""
+            width={headerPng.width}
+            height={headerPng.height}
+            class:list={[
+              'h-9 w-auto max-w-[112px] object-contain object-left sm:h-10 sm:max-w-[128px] lg:h-11 lg:max-w-[140px]',
+              isLight && 'brightness-0 invert',
+            ]}
+            decoding="async"
+            loading="eager"
+            aria-hidden="true"
+          />
+        </picture>
+      </span>
+
+      <span class="flex min-w-0 flex-col leading-none">
+        <span
+          class:list={[
+            'font-display text-[1rem] font-semibold tracking-tight sm:text-[1.15rem]',
+            isLight ? 'text-white' : 'text-primary-dark',
+          ]}
+        >
+          {site.shortName}
+        </span>
+        <span
+          class:list={[
+            'mt-0.5 text-[0.58rem] font-semibold uppercase tracking-[0.14em] sm:mt-1 sm:text-[0.62rem] sm:tracking-[0.16em]',
+            isLight ? 'text-white/70' : 'text-primary',
+          ]}
+        >
+          {site.brandSubtitle}
+        </span>
+      </span>
+    </a>
+  )
+}
+
+<style>
+  .logo-header {
+    isolation: isolate;
+  }
+
+  .logo-header__flare {
+    pointer-events: none;
+    position: absolute;
+    z-index: 0;
+    inset: 12% 6%;
+    border-radius: 40%;
+    background:
+      radial-gradient(
+        90% 80% at 50% 45%,
+        rgb(255 255 255 / 0.95) 0%,
+        rgb(232 242 243 / 0.55) 42%,
+        rgb(14 92 99 / 0.12) 68%,
+        transparent 100%
+      );
+    filter: blur(8px);
+    opacity: 0.9;
+  }
+</style>

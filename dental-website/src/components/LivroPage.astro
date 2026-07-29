@@ -1,0 +1,28 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import type { Lang } from '../i18n';
+import { useTranslations } from '../i18n';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+const dest = 'https://www.livroreclamacoes.pt';
+---
+
+<BaseLayout lang={lang} title={t.meta.livroTitle} description={t.meta.livroDescription}>
+  <Fragment slot="head">
+    <meta http-equiv="refresh" content={`0;url=${dest}`} />
+  </Fragment>
+  <main id="conteudo" class="section-pad flex min-h-[60vh] items-center justify-center pt-28">
+    <div class="container-site max-w-lg text-center">
+      <h1 class="text-2xl text-primary-dark">{t.legal.livroHeading}</h1>
+      <p class="mt-3 text-muted">{t.legal.livroRedirect}</p>
+      <a href={dest} class="mt-6 inline-flex text-primary underline-offset-2 hover:underline">
+        {t.legal.livroContinue}
+      </a>
+    </div>
+  </main>
+</BaseLayout>

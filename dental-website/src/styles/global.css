@@ -1,0 +1,132 @@
+@import "tailwindcss";
+@import "@fontsource-variable/fraunces/wght.css";
+@import "@fontsource-variable/inter/wght.css";
+
+@theme {
+  --color-primary: #0e5c63;
+  --color-primary-dark: #083e43;
+  --color-primary-soft: #e8f2f3;
+  --color-accent: #c9a227;
+  --color-emergency: #b3453b;
+  --color-emergency-soft: #f8eceb;
+  --color-surface: #f7f9f9;
+  --color-ink: #1a2426;
+  --color-muted: #5c6b6d;
+  --color-border: #d8e2e3;
+  --color-white: #ffffff;
+
+  --font-display: "Fraunces Variable", "Fraunces", Georgia, serif;
+  --font-sans: "Inter Variable", "Inter", system-ui, sans-serif;
+
+  --shadow-soft: 0 1px 2px rgb(8 62 67 / 0.04), 0 4px 16px rgb(8 62 67 / 0.06);
+  --radius-card: 12px;
+  --max-content: 1200px;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+    overflow-x: clip;
+  }
+
+  @media (min-width: 1024px) {
+    html {
+      scroll-padding-top: 5.25rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  body {
+    @apply bg-white font-sans text-ink antialiased;
+    font-size: 17px;
+    line-height: 1.6;
+    overflow-x: clip;
+  }
+
+  @media (min-width: 768px) {
+    body {
+      font-size: 18px;
+    }
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display font-semibold tracking-tight text-balance;
+    line-height: 1.2;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-primary) 22%, white);
+    color: var(--color-primary-dark);
+  }
+}
+
+@layer utilities {
+  .container-site {
+    width: min(100% - 1.5rem, var(--max-content));
+    margin-inline: auto;
+  }
+
+  @media (min-width: 480px) {
+    .container-site {
+      width: min(100% - 2rem, var(--max-content));
+    }
+  }
+
+  @media (min-width: 768px) {
+    .container-site {
+      width: min(100% - 3rem, var(--max-content));
+    }
+  }
+
+  .section-pad {
+    padding-block: 3.5rem;
+  }
+
+  @media (min-width: 768px) {
+    .section-pad {
+      padding-block: 6rem;
+    }
+  }
+
+  .fade-up {
+    opacity: 0;
+    transform: translateY(16px);
+    transition:
+      opacity 300ms ease,
+      transform 300ms ease;
+  }
+
+  .fade-up.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fade-up {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+}

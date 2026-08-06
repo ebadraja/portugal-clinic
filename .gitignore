@@ -11,10 +11,10 @@
 # testing
 coverage/
 
-# next.js (pediatric-app)
+# next.js (booking-app)
 **/.next/
 **/out/
-pediatric-app/lib/generated/prisma
+booking-app/lib/generated/prisma
 
 # astro (dental-website)
 **/dist/
@@ -48,6 +48,8 @@ logs/
 .env.*
 **/.env
 **/.env.*
+!.env.example
+!**/.env.example
 
 # vercel
 .vercel

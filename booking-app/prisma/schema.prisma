@@ -1,0 +1,1192 @@
+// Prisma 7 — datasource URL lives in prisma.config.ts, not here
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  STAFF
+  VIEWER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum PatientStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+  DRAFT
+}
+
+enum AppointmentType {
+  EVALUATION
+  HYGIENE
+  RESTORATIVE
+  ENDODONTICS
+  IMPLANT
+  ORTHODONTICS
+  AESTHETICS
+  SURGERY
+  EMERGENCY
+  FOLLOW_UP
+  CONSULTATION
+  PROCEDURE
+  OTHER
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  RESCHEDULED
+}
+
+enum BookingSource {
+  STAFF
+  VOICE_AGENT
+  CHATBOT
+  WEBSITE
+  WALK_IN
+}
+
+enum CallIntent {
+  APPOINTMENT_BOOKING
+  INQUIRY
+  COMPLAINT
+  SUPPORT
+  ROUTING
+  CANCELLATION
+  VERIFICATION
+  EMERGENCY
+  GENERAL
+}
+
+enum CallOutcome {
+  IN_PROGRESS
+  BOOKED
+  INFO_PROVIDED
+  TRANSFERRED
+  HUNG_UP
+  VOICEMAIL
+}
+
+enum Sentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+}
+
+enum ChatTopic {
+  APPOINTMENT
+  PRICING
+  INSURANCE
+  HOURS
+  SERVICES
+  LOCATION
+  OTHER
+}
+
+enum ChatOutcome {
+  IN_PROGRESS
+  BOOKED
+  INFO_PROVIDED
+  ESCALATED_TO_CALL
+  LEAD_CAPTURED
+  ABANDONED
+}
+
+enum NoteType {
+  GENERAL
+  MEDICAL
+  ADMINISTRATIVE
+  FOLLOW_UP
+  ALERT
+}
+
+enum DocumentCategory {
+  INTAKE_FORM
+  MEDICAL_RECORD
+  INSURANCE
+  CONSENT
+  LAB_RESULT
+  IMAGE
+  OTHER
+}
+
+enum AuditAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  MESSAGE_SENT
+  MESSAGE_READ
+  CONVERSATION_ASSIGNED
+  CONVERSATION_RESOLVED
+  PORTAL_ACCESS
+  BROADCAST_SENT
+}
+
+enum UserApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum IntakeFormStatus {
+  RECEIVED
+  MATCHED
+  DRAFT
+  LINKED
+  ARCHIVED
+}
+
+enum DraftStatus {
+  PENDING
+  READY_FOR_APPROVAL
+  APPROVED
+  REJECTED
+  PUBLISHED
+}
+
+enum EmailTemplateType {
+  TRANSACTIONAL
+  BULK
+  AUTOMATED
+}
+
+enum EmailCampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  PAUSED
+  CANCELLED
+}
+
+enum EmailLogType {
+  REMINDER
+  CAMPAIGN
+  AUTOMATED
+}
+
+enum EmailLogStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  FAILED
+  UNSUBSCRIBED
+}
+
+enum EmailTriggerEvent {
+  APPOINTMENT_CREATED
+  APPOINTMENT_UPDATED
+  APPOINTMENT_CANCELLED
+  X_DAYS_BEFORE
+  X_DAYS_AFTER
+  PATIENT_CREATED
+}
+
+// ─── Messaging Enums ─────────────────────────────────────────────────────────
+
+enum ConversationStatus {
+  OPEN
+  AWAITING_REPLY
+  RESOLVED
+  ARCHIVED
+}
+
+enum MessageSenderType {
+  PATIENT
+  STAFF
+  SYSTEM
+}
+
+enum MessageChannel {
+  SMS
+  WEB_CHAT
+  PORTAL
+  SYSTEM
+}
+
+enum MessageContentType {
+  TEXT
+  IMAGE
+  FILE
+  FORM_LINK
+  SYSTEM_EVENT
+}
+
+enum MessageDeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum MessagingTriggerEvent {
+  APPOINTMENT_REMINDER
+  APPOINTMENT_CONFIRMED
+  APPOINTMENT_CANCELLED
+  NO_SHOW
+  POST_VISIT
+  NEW_PATIENT
+  INTAKE_FORM_DUE
+  CUSTOM
+}
+
+enum BroadcastStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+}
+
+enum MessageReason {
+  SCHEDULING
+  REFILL
+  QUESTION
+  URGENT
+  INSURANCE
+  RECORDS
+  OTHER
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  passwordHash     String    @map("password_hash")
+  firstName        String    @map("first_name")
+  lastName         String    @map("last_name")
+  role             Role      @default(STAFF)
+  jobTitle         String?   @map("job_title")
+  phone            String?
+  avatar           String?
+  isActive         Boolean           @default(true) @map("is_active")
+  approvalStatus   UserApprovalStatus @default(APPROVED) @map("approval_status")
+  twoFactorEnabled Boolean           @default(false) @map("two_factor_enabled")
+  twoFactorSecret  String?   @map("two_factor_secret")
+  lastLoginAt      DateTime? @map("last_login_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  patients                      Patient[]
+  appointments                  Appointment[]
+  notes                         PatientNote[]
+  auditLogs                     AuditLog[]
+  intakeForms                   IntakeForm[]
+  intakeFormAccessControl       IntakeFormAccessControl?
+  patientDraftsCreated          PatientDraft[] @relation("draftCreator")
+  patientDraftsPublished        PatientDraft[] @relation("draftPublisher")
+  notifications                 Notification[]
+  emailCampaigns                EmailCampaign[]
+  assignedConversations         Conversation[]              @relation("ConversationAssignee")
+  sentMessages                  Message[]                   @relation("MessageSender")
+  sharedInboxMemberships        SharedInboxMember[]
+  createdMessageTemplates       MessageTemplate[]           @relation("TemplateCreator")
+  createdBroadcasts             Broadcast[]                 @relation("BroadcastCreator")
+
+  @@map("users")
+}
+
+model Patient {
+  id          String   @id @default(cuid())
+  firstName   String   @map("first_name")
+  middleName  String?  @map("middle_name")
+  lastName    String   @map("last_name")
+  dateOfBirth DateTime @map("date_of_birth")
+  gender      Gender?
+
+  // External system ID (Develo import dedupe)
+  externalId String? @unique @map("external_id")
+
+  // Contact
+  phone   String?
+  email   String?
+  address String?
+  city    String?
+  state   String?
+  zipCode String? @map("zip_code")
+
+  // Parent / Guardian
+  parentName     String? @map("parent_name")
+  parentRelation String? @map("parent_relation")
+  parentPhone    String? @map("parent_phone")
+  parentEmail    String? @map("parent_email")
+
+  // Second Parent / Guardian
+  parent2Name     String? @map("parent2_name")
+  parent2Relation String? @map("parent2_relation")
+  parentPhone2    String? @map("parent_phone2")
+  parent2Email    String? @map("parent2_email")
+
+  // Emergency
+  emergencyContact String? @map("emergency_contact")
+  emergencyPhone   String? @map("emergency_phone")
+
+  // Medical
+  insuranceProvider  String? @map("insurance_provider")
+  insuranceId        String? @map("insurance_id")
+  insurancePlanType  String? @map("insurance_plan_type")
+  insurancePlan      String? @map("insurance_plan")
+  insuranceMemberId  String? @map("insurance_member_id")
+  allergies          String?
+  medications       String?
+  medicalNotes      String? @map("medical_notes")
+
+  // Demographics (Develo import — not wired to logic yet)
+  raceEthnicity     String? @map("race_ethnicity")
+
+  // Preferences
+  preferredLanguage String  @default("English") @map("preferred_language")
+  secondaryLanguage String? @map("secondary_language")
+  preferredProvider String? @map("preferred_provider")
+
+  // Membership (Develo import — not wired to logic yet)
+  membershipStatus  String? @map("membership_status")
+
+  // Status & tracking
+  status       PatientStatus @default(ACTIVE)
+  totalVisits  Int           @default(0) @map("total_visits")
+  lastVisitAt  DateTime?     @map("last_visit_at")
+  patientSince DateTime      @default(now()) @map("patient_since")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdById String?  @map("created_by_id")
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+
+  appointments Appointment[]
+  callLogs     CallLog[]
+  chatLogs     ChatLog[]
+  notes        PatientNote[]
+  documents    Document[]
+  intakeForms  IntakeForm[]
+  emailLogs    EmailLog[]
+  unsubscribe  Unsubscribe?
+  conversation Conversation?
+  portalSessions PatientPortalSession[]
+  smsOptOuts   SMSOptOut[]
+  smsOptOut    Boolean @default(false) @map("sms_opt_out")
+  privateMode  Boolean @default(false) @map("private_mode")
+
+  @@index([phone])
+  @@index([parentPhone2])
+  @@index([lastName, firstName])
+  @@map("patients")
+}
+
+model Appointment {
+  id        String  @id @default(cuid())
+  patientId String  @map("patient_id")
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  startTime DateTime @map("start_time")
+  endTime   DateTime @map("end_time")
+  duration  Int // minutes
+
+  type     AppointmentType   @default(OTHER)
+  status   AppointmentStatus @default(SCHEDULED)
+  provider String?
+  reason   String?
+  notes    String?
+
+  confirmedAt   DateTime? @map("confirmed_at")
+  confirmedVia  String?   @map("confirmed_via")
+  remindersSent Int       @default(0) @map("reminders_sent")
+
+  cancelledAt  DateTime? @map("cancelled_at")
+  cancelReason String?   @map("cancel_reason")
+
+  bookedVia BookingSource @default(STAFF) @map("booked_via")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdById String?  @map("created_by_id")
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+
+  callLog CallLog?
+  chatLog ChatLog?
+
+  @@index([startTime])
+  @@index([status])
+  @@index([patientId])
+  @@map("appointments")
+}
+
+model CallLog {
+  id        String   @id @default(cuid())
+  patientId String?  @map("patient_id")
+  patient   Patient? @relation(fields: [patientId], references: [id])
+
+  callerName  String?   @map("caller_name")
+  callerPhone String    @map("caller_phone")
+  startTime   DateTime  @map("start_time")
+  endTime     DateTime? @map("end_time")
+  duration    Int? // seconds
+
+  intent    CallIntent  @default(GENERAL)
+  outcome   CallOutcome @default(IN_PROGRESS)
+  sentiment Sentiment   @default(NEUTRAL)
+
+  transcript   String? @db.Text
+  summary      String? @db.Text
+  recordingUrl String? @map("recording_url")
+
+  appointmentBooked Boolean      @default(false) @map("appointment_booked")
+  appointmentId     String?      @unique @map("appointment_id")
+  appointment       Appointment? @relation(fields: [appointmentId], references: [id])
+
+  wasEscalated     Boolean @default(false) @map("was_escalated")
+  escalationReason String? @map("escalation_reason")
+  transferredTo    String? @map("transferred_to")
+
+  vapiCallId      String? @unique @map("vapi_call_id")
+  isReviewed      Boolean @default(false) @map("is_reviewed")
+  flagForFollowUp Boolean @default(false) @map("flag_for_follow_up")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([startTime])
+  @@index([callerPhone])
+  @@index([patientId])
+  @@map("call_logs")
+}
+
+model ChatLog {
+  id        String   @id @default(cuid())
+  patientId String?  @map("patient_id")
+  patient   Patient? @relation(fields: [patientId], references: [id])
+
+  visitorName  String? @map("visitor_name")
+  visitorEmail String? @map("visitor_email")
+  visitorPhone String? @map("visitor_phone")
+  sessionId    String  @unique @map("session_id")
+
+  startTime    DateTime  @map("start_time")
+  endTime      DateTime? @map("end_time")
+  messageCount Int       @default(0) @map("message_count")
+
+  topic   ChatTopic   @default(OTHER)
+  outcome ChatOutcome @default(IN_PROGRESS)
+
+  // [{type, content, timestamp, senderName?}]
+  messages Json
+  summary  String? @db.Text
+
+  sourcePage String? @map("source_page")
+  deviceType String? @map("device_type")
+  browser    String?
+
+  appointmentBooked Boolean      @default(false) @map("appointment_booked")
+  appointmentId     String?      @unique @map("appointment_id")
+  appointment       Appointment? @relation(fields: [appointmentId], references: [id])
+
+  leadCaptured Boolean @default(false) @map("lead_captured")
+  leadInfo     Json?   @map("lead_info")
+  isReviewed   Boolean @default(false) @map("is_reviewed")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([startTime])
+  @@index([sessionId])
+  @@map("chat_logs")
+}
+
+model PatientNote {
+  id        String  @id @default(cuid())
+  patientId String  @map("patient_id")
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  authorId  String  @map("author_id")
+  author    User    @relation(fields: [authorId], references: [id])
+
+  content   String   @db.Text
+  noteType  NoteType @default(GENERAL) @map("note_type")
+  isPrivate Boolean  @default(false) @map("is_private")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([patientId])
+  @@map("patient_notes")
+}
+
+model Document {
+  id        String  @id @default(cuid())
+  patientId String  @map("patient_id")
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  fileName    String           @map("file_name")
+  fileSize    Int              @map("file_size") // bytes
+  fileType    String           @map("file_type")
+  fileUrl     String           @map("file_url")
+  category    DocumentCategory @default(OTHER)
+  description String?
+  uploadedBy  String           @map("uploaded_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([patientId])
+  @@map("documents")
+}
+
+// Singleton — one row stores all practice configuration
+model Settings {
+  id String @id @default(cuid())
+
+  // Practice info
+  practiceName    String  @default("Clínica Dentária Nunes Monteiro") @map("practice_name")
+  practiceTagline String? @map("practice_tagline")
+  practicePhone   String? @map("practice_phone")
+  practiceEmail   String? @map("practice_email")
+  practiceAddress String? @map("practice_address")
+  practiceWebsite String? @map("practice_website")
+
+  // Hours & schedule (JSON: {day, open, close, enabled})
+  businessHours Json? @map("business_hours")
+  lunchBreak    Json? @map("lunch_break")
+  holidays      Json?
+
+  // Voice agent (Vapi / 11labs)
+  voiceAgentEnabled Boolean @default(false) @map("voice_agent_enabled")
+  voiceAgentName    String  @default("Jenny") @map("voice_agent_name")
+  voiceProvider     String  @default("11labs") @map("voice_provider")
+  voiceId           String? @map("voice_id")
+  greetingMessage   String? @map("greeting_message") @db.Text
+  toneSlider        Int     @default(50) @map("tone_slider")
+  speedSlider       Int     @default(50) @map("speed_slider")
+  empathySlider     Int     @default(50) @map("empathy_slider")
+  emergencyPhone    String? @map("emergency_phone")
+
+  // Website chatbot
+  chatbotEnabled     Boolean @default(false) @map("chatbot_enabled")
+  chatbotWelcomeMsg  String? @map("chatbot_welcome_msg") @db.Text
+  chatbotPosition    String  @default("bottom-right") @map("chatbot_position")
+  chatbotTheme       String  @default("blue") @map("chatbot_theme")
+  autoTriggerSeconds Int     @default(0) @map("auto_trigger_seconds")
+
+  // Notification preferences
+  notificationEmail    String? @map("notification_email")
+  smsEnabled           Boolean @default(true) @map("sms_enabled")
+  emailEnabled         Boolean @default(true) @map("email_enabled")
+  emailNewBooking      Boolean @default(true) @map("email_new_booking")
+  emailCancellation    Boolean @default(true) @map("email_cancellation")
+  emailEscalation      Boolean @default(true) @map("email_escalation")
+  emailNewPatient      Boolean @default(true) @map("email_new_patient")
+  emailDailySummary    Boolean @default(false) @map("email_daily_summary")
+  emailWeeklyAnalytics Boolean @default(false) @map("email_weekly_analytics")
+
+  // Security
+  twoFactorRequired Boolean @default(false) @map("two_factor_required")
+  sessionTimeout    Int     @default(30) @map("session_timeout") // minutes
+
+  // Appointment types (JSON: [{id, name, duration, color, providers[], buffer}])
+  appointmentTypes Json? @map("appointment_types")
+
+  // Integration status (JSON: [{name, service, status, lastSync}])
+  integrations Json?
+
+  // Hippatizer Integration
+  hippatizEnabled           Boolean   @default(false)     @map("hippatiz_enabled")
+  hippatizApiKey            String?   @map("hippatiz_api_key")
+  hippatizWebhookSecret     String?   @map("hippatiz_webhook_secret")
+  hippatizWebhookUrl        String?   @map("hippatiz_webhook_url")
+  hippatizLastSync          DateTime? @map("hippatiz_last_sync")
+  hippatizFormTemplates     Json?     @map("hippatiz_form_templates")
+  hippatizAccountId         String?   @map("hippatiz_account_id")
+  hippatizUserId            String?   @map("hippatiz_user_id")
+
+  // Intake Form Notifications
+  intakeFormNotifyEmail     String?   @map("intake_form_notify_email")
+  intakeFormNotifyOnNewForm Boolean   @default(true) @map("intake_form_notify_on_new_form")
+
+  // Google Calendar Integration
+  googleCalClientId      String?   @map("google_cal_client_id")
+  googleCalClientSecret  String?   @map("google_cal_client_secret")
+  googleCalCalendarId    String?   @default("primary") @map("google_cal_calendar_id")
+  googleCalAccessToken   String?   @map("google_cal_access_token") @db.Text
+  googleCalRefreshToken  String?   @map("google_cal_refresh_token") @db.Text
+  googleCalTokenExpiry   DateTime? @map("google_cal_token_expiry")
+  googleCalEnabled       Boolean   @default(false) @map("google_cal_enabled")
+  googleCalSyncDirection String    @default("read_only") @map("google_cal_sync_direction")
+  googleCalLastSync      DateTime? @map("google_cal_last_sync")
+
+  // Gmail email sending — reuses the Google OAuth client above (same Cloud project)
+  gmailAccessToken  String?   @map("gmail_access_token") @db.Text
+  gmailRefreshToken String?   @map("gmail_refresh_token") @db.Text
+  gmailTokenExpiry  DateTime? @map("gmail_token_expiry")
+  gmailSenderEmail  String?   @map("gmail_sender_email")
+  gmailFromName     String?   @map("gmail_from_name")
+  gmailEnabled      Boolean   @default(false) @map("gmail_enabled")
+
+  // Patient Messaging
+  messagingEnabled       Boolean @default(false) @map("messaging_enabled")
+  smsProviderConfig      Json?   @map("sms_provider_config")
+  messagingBusinessHours Json?   @map("messaging_business_hours")
+  defaultRoutingRules    Json?   @map("default_routing_rules")
+  webChatWidgetConfig    Json?   @map("web_chat_widget_config")
+  portalConfig           Json?   @map("portal_config")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+// HIPAA-required audit trail
+model AuditLog {
+  id     String  @id @default(cuid())
+  userId String? @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id])
+
+  action    AuditAction
+  entity    String // "patient", "appointment", "call_log", etc.
+  entityId  String?     @map("entity_id")
+  changes   Json?
+  ipAddress String?     @map("ip_address")
+  userAgent String?     @map("user_agent")
+  timestamp DateTime    @default(now())
+
+  @@index([userId])
+  @@index([timestamp])
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}
+
+// FAQs fed to AI voice agent and chatbot
+model KnowledgeItem {
+  id       String @id @default(cuid())
+  category String
+  question String @db.Text
+  answer   String @db.Text
+
+  timesAsked  Int       @default(0) @map("times_asked")
+  lastAskedAt DateTime? @map("last_asked_at")
+
+  isActive  Boolean @default(true) @map("is_active")
+  priority  Int     @default(0)
+  sourceUrl String? @map("source_url")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@map("knowledge_items")
+}
+
+// ─── Hippatizer Intake Forms Integration ──────────────────────────────────────
+
+model IntakeForm {
+  id                String   @id @default(cuid())
+
+  // Hippatizer metadata
+  hippatizerId      String   @unique @map("hippatizer_id")
+  hippatizFormId    String   @map("hippatiz_form_id")
+  hippatizFormTitle String   @map("hippatiz_form_title")
+  hippatizViewLink  String?  @map("hippatiz_view_link") @db.Text
+  hippatizPdfLink   String?  @map("hippatiz_pdf_link") @db.Text
+
+  // Patient linking
+  patientId         String?  @map("patient_id")
+  patient           Patient? @relation(fields: [patientId], references: [id])
+
+  patientDraftId    String?  @map("patient_draft_id")
+  patientDraft      PatientDraft? @relation(fields: [patientDraftId], references: [id])
+
+  // Status tracking
+  status            IntakeFormStatus @default(RECEIVED)
+  matchConfidence   Float?   @map("match_confidence")
+  matchNotes        String?  @map("match_notes") @db.Text
+
+  // Raw form data
+  fieldValues       IntakeFormFieldValue[]
+
+  // Metadata
+  submittedAt       DateTime @map("submitted_at")
+  linkedAt          DateTime? @map("linked_at")
+  processedAt       DateTime? @map("processed_at")
+  processedById     String?  @map("processed_by_id")
+  processedBy       User?    @relation(fields: [processedById], references: [id])
+  deletedAt         DateTime? @map("deleted_at")
+
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([patientId])
+  @@index([patientDraftId])
+  @@index([status])
+  @@index([submittedAt])
+  @@map("intake_forms")
+}
+
+model IntakeFormFieldValue {
+  id            String   @id @default(cuid())
+  intakeFormId  String   @map("intake_form_id")
+  intakeForm    IntakeForm @relation(fields: [intakeFormId], references: [id], onDelete: Cascade)
+
+  fieldId       String   @map("field_id")
+  fieldLabel    String?  @map("field_label")
+  fieldType     String   @map("field_type")
+
+  value         String?  @db.Text
+
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([intakeFormId])
+  @@index([fieldId])
+  @@map("intake_form_field_values")
+}
+
+model PatientDraft {
+  id                String   @id @default(cuid())
+
+  // Extracted from intake form
+  firstName         String   @map("first_name")
+  lastName          String   @map("last_name")
+  dateOfBirth       DateTime @map("date_of_birth")
+  email             String?
+  phone             String?
+  
+  middleInitial     String?  @map("middle_initial")
+  gender            String?
+  preferredPronouns String?  @map("preferred_pronouns")
+  preferredLanguage String?  @map("preferred_language")
+  streetAddress     String?  @map("street_address")
+  city              String?
+  state             String?
+  zipCode           String?  @map("zip_code")
+
+  // Caregiver info (can have up to 2)
+  caregiver1FirstName   String?  @map("caregiver1_first_name")
+  caregiver1LastName    String?  @map("caregiver1_last_name")
+  caregiver1Relationship String? @map("caregiver1_relationship")
+  caregiver1Phone       String?  @map("caregiver1_phone")
+  caregiver1Email       String?  @map("caregiver1_email")
+
+  caregiver2FirstName   String?  @map("caregiver2_first_name")
+  caregiver2LastName    String?  @map("caregiver2_last_name")
+  caregiver2Relationship String? @map("caregiver2_relationship")
+  caregiver2Phone       String?  @map("caregiver2_phone")
+  caregiver2Email       String?  @map("caregiver2_email")
+
+  // Medical info
+  pcpName           String?  @map("pcp_name")
+  pcpClinicName     String?  @map("pcp_clinic_name")
+  pcpPhone          String?  @map("pcp_phone")
+
+  // Status
+  status            DraftStatus @default(PENDING)
+  rejectionReason   String?     @map("rejection_reason")
+
+  // Linked forms
+  intakeForms       IntakeForm[]
+
+  // Audit
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  createdById       String   @map("created_by_id")
+  createdBy         User     @relation("draftCreator", fields: [createdById], references: [id])
+
+  publishedAt       DateTime? @map("published_at")
+  publishedById     String?   @map("published_by_id")
+  publishedBy       User?     @relation("draftPublisher", fields: [publishedById], references: [id])
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("patient_drafts")
+}
+
+model IntakeFormFieldMapping {
+  id              String   @id @default(cuid())
+
+  hippatizFormId  String   @map("hippatiz_form_id")
+  formTitle       String   @map("form_title")
+
+  // Mapping config: [{hippatizFieldId, hippatizLabel, patientField, fieldType}]
+  mappings        Json
+
+  isActive        Boolean  @default(true) @map("is_active")
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([hippatizFormId])
+  @@map("intake_form_field_mappings")
+}
+
+model IntakeFormAccessControl {
+  id                String   @id @default(cuid())
+
+  userId            String   @map("user_id")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  canView           Boolean  @default(false)  @map("can_view")
+  canMatch          Boolean  @default(false)  @map("can_match")
+  canPublish        Boolean  @default(false)  @map("can_publish")
+
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId])
+  @@map("intake_form_access_controls")
+}
+
+// User notifications (form submissions, system alerts)
+model Notification {
+  id                String   @id @default(cuid())
+
+  userId            String   @map("user_id")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Notification content
+  type              String   @default("info") // form_submitted, patient_matched, draft_approved, new_message, message_assigned, conversation_escalated, broadcast_completed, warning, error
+  title             String
+  message           String   @db.Text
+  icon              String?  // "form", "patient", "check", "alert", "error"
+
+  // Related entity
+  entityType        String?  @map("entity_type") // "intake_form", "patient", "draft_patient"
+  entityId          String?  @map("entity_id")
+
+  // Status
+  isRead            Boolean  @default(false) @map("is_read")
+  readAt            DateTime? @map("read_at")
+  notifStatus       String   @default("pending") @map("notif_status") // "pending" | "acknowledged" | "completed"
+
+  actionUrl         String?  @map("action_url") // URL to navigate to when clicked
+
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@map("notifications")
+}
+
+// ─── Email System ─────────────────────────────────────────────────────────────
+
+model EmailTemplate {
+  id        String            @id @default(cuid())
+  name      String
+  type      EmailTemplateType
+  subject   String
+  htmlBody  String            @map("html_body") @db.Text
+  plainBody String?           @map("plain_body") @db.Text
+
+  // Merge tag variable names e.g. ["patient_name", "appointment_date"]
+  variables Json?
+
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt     @map("updated_at")
+
+  campaigns      EmailCampaign[]
+  logs           EmailLog[]
+  automationRules EmailAutomationRule[]
+
+  @@index([type])
+  @@index([isActive])
+  @@map("email_templates")
+}
+
+model EmailCampaign {
+  id         String              @id @default(cuid())
+  name       String
+  templateId String              @map("template_id")
+  template   EmailTemplate       @relation(fields: [templateId], references: [id])
+
+  status          EmailCampaignStatus @default(DRAFT)
+  scheduledAt     DateTime?           @map("scheduled_at")
+  sentAt          DateTime?           @map("sent_at")
+
+  // Audience filter criteria e.g. {ageRange: [0,5], lastVisitBefore: "2025-01-01", provider: "Dr. Tamas"}
+  segmentFilters  Json?   @map("segment_filters")
+  recipientCount  Int     @default(0) @map("recipient_count")
+
+  createdById String @map("created_by_id")
+  createdBy   User   @relation(fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt     @map("updated_at")
+
+  logs EmailLog[]
+
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([createdById])
+  @@map("email_campaigns")
+}
+
+model EmailLog {
+  id         String  @id @default(cuid())
+  campaignId String? @map("campaign_id")
+  campaign   EmailCampaign? @relation(fields: [campaignId], references: [id])
+
+  patientId  String        @map("patient_id")
+  patient    Patient       @relation(fields: [patientId], references: [id])
+
+  templateId String        @map("template_id")
+  template   EmailTemplate @relation(fields: [templateId], references: [id])
+
+  type    EmailLogType
+  // Stored encrypted at application layer via lib/crypto.ts
+  toEmail String       @map("to_email")
+  subject String
+
+  status      EmailLogStatus @default(QUEUED)
+  sentAt      DateTime?      @map("sent_at")
+  openedAt    DateTime?      @map("opened_at")
+  clickedAt   DateTime?      @map("clicked_at")
+
+  errorMessage String? @map("error_message") @db.Text
+
+  // Tracking metadata e.g. {messageId, provider, ipAddress}
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([patientId])
+  @@index([campaignId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("email_logs")
+}
+
+model EmailAutomationRule {
+  id       String @id @default(cuid())
+  name     String
+  isActive Boolean @default(true) @map("is_active")
+
+  triggerEvent       EmailTriggerEvent @map("trigger_event")
+  // Negative = before event, positive = after. e.g. -48 = 48 hours before appointment
+  triggerOffsetHours Int?              @map("trigger_offset_hours")
+
+  // Filter conditions e.g. {visitType: "EVALUATION", ageRange: [0, 100]}
+  conditions Json?
+
+  templateId String        @map("template_id")
+  template   EmailTemplate @relation(fields: [templateId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt     @map("updated_at")
+
+  @@index([isActive])
+  @@index([triggerEvent])
+  @@map("email_automation_rules")
+}
+
+model Unsubscribe {
+  id        String  @id @default(cuid())
+  patientId String  @map("patient_id")
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  // Stored encrypted at application layer via lib/crypto.ts
+  email          String
+  unsubscribedAt DateTime @default(now()) @map("unsubscribed_at")
+  reason         String?  @db.Text
+
+  @@unique([patientId])
+  @@index([unsubscribedAt])
+  @@map("unsubscribes")
+}
+
+// ─── Patient Messaging System ─────────────────────────────────────────────────
+
+model Conversation {
+  id                 String             @id @default(uuid())
+  patientId          String             @unique @map("patient_id")
+  status             ConversationStatus @default(OPEN)
+  assignedToId       String?            @map("assigned_to_id")
+  assignedInboxId    String?            @map("assigned_inbox_id")
+  lastMessageAt      DateTime?          @map("last_message_at")
+  lastMessagePreview String?            @map("last_message_preview")
+  unreadCount        Int                @default(0) @map("unread_count")
+  reason             MessageReason?
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  patient        Patient                     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  assignedTo     User?                       @relation("ConversationAssignee", fields: [assignedToId], references: [id])
+  assignedInbox  SharedInbox?                @relation(fields: [assignedInboxId], references: [id])
+  messages       Message[]
+  assignmentLogs ConversationAssignmentLog[]
+
+  @@index([status, assignedToId])
+  @@index([lastMessageAt(sort: Desc)])
+  @@map("conversations")
+}
+
+model Message {
+  id                String                @id @default(uuid())
+  conversationId    String                @map("conversation_id")
+  senderType        MessageSenderType     @map("sender_type")
+  senderId          String?               @map("sender_id")
+  channel           MessageChannel
+  content           String                @db.Text // encrypted AES-256-GCM via lib/crypto.ts
+  contentType       MessageContentType    @default(TEXT) @map("content_type")
+  deliveryStatus    MessageDeliveryStatus @default(QUEUED) @map("delivery_status")
+  externalMessageId String?               @map("external_message_id")
+  isInternalNote    Boolean               @default(false) @map("is_internal_note")
+  readAt            DateTime?             @map("read_at")
+  metadata          Json?
+  createdAt         DateTime              @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User?        @relation("MessageSender", fields: [senderId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@index([externalMessageId])
+  @@map("messages")
+}
+
+model SharedInbox {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  isDefault   Boolean  @default(false) @map("is_default")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  members       SharedInboxMember[]
+  conversations Conversation[]
+
+  @@map("shared_inboxes")
+}
+
+model SharedInboxMember {
+  id            String   @id @default(uuid())
+  sharedInboxId String   @map("shared_inbox_id")
+  userId        String   @map("user_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  sharedInbox SharedInbox @relation(fields: [sharedInboxId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sharedInboxId, userId])
+  @@map("shared_inbox_members")
+}
+
+model MessageTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  category    String
+  body        String   @db.Text
+  channel     String   @default("BOTH")
+  isLocked    Boolean  @default(false) @map("is_locked")
+  createdById String   @map("created_by_id")
+  usageCount  Int      @default(0) @map("usage_count")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  createdBy       User                    @relation("TemplateCreator", fields: [createdById], references: [id])
+  automationRules MessagingAutomationRule[]
+  broadcasts      Broadcast[]
+
+  @@map("message_templates")
+}
+
+model MessagingAutomationRule {
+  id           String                @id @default(uuid())
+  name         String
+  triggerEvent MessagingTriggerEvent @map("trigger_event")
+  delayMinutes Int                   @default(0) @map("delay_minutes")
+  templateId   String                @map("template_id")
+  channel      String                @default("BOTH")
+  conditions   Json?
+  isActive     Boolean               @default(true) @map("is_active")
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
+
+  template MessageTemplate @relation(fields: [templateId], references: [id])
+
+  @@map("messaging_automation_rules")
+}
+
+model ConversationAssignmentLog {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  fromUserId     String?  @map("from_user_id")
+  toUserId       String?  @map("to_user_id")
+  toInboxId      String?  @map("to_inbox_id")
+  reason         String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("conversation_assignment_logs")
+}
+
+model PatientPortalSession {
+  id                String    @id @default(uuid())
+  patientId         String    @map("patient_id")
+  token             String    @unique
+  phoneNumber       String    @map("phone_number")
+  verifiedAt        DateTime? @map("verified_at")
+  expiresAt         DateTime  @map("expires_at")
+  deviceFingerprint String?   @map("device_fingerprint")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, expiresAt])
+  @@map("patient_portal_sessions")
+}
+
+model Broadcast {
+  id             String          @id @default(uuid())
+  name           String
+  templateId     String          @map("template_id")
+  segmentFilters Json?           @map("segment_filters")
+  status         BroadcastStatus @default(DRAFT)
+  scheduledAt    DateTime?       @map("scheduled_at")
+  sentAt         DateTime?       @map("sent_at")
+  recipientCount Int             @default(0) @map("recipient_count")
+  deliveredCount Int             @default(0) @map("delivered_count")
+  failedCount    Int             @default(0) @map("failed_count")
+  createdById    String          @map("created_by_id")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  template  MessageTemplate @relation(fields: [templateId], references: [id])
+  createdBy User            @relation("BroadcastCreator", fields: [createdById], references: [id])
+
+  @@map("broadcasts")
+}
+
+model SMSOptOut {
+  id          String    @id @default(uuid())
+  patientId   String    @map("patient_id")
+  phoneNumber String    @map("phone_number")
+  optedOutAt  DateTime  @default(now()) @map("opted_out_at")
+  optedInAt   DateTime? @map("opted_in_at")
+  isOptedOut  Boolean   @default(true) @map("is_opted_out")
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([phoneNumber])
+  @@map("sms_opt_outs")
+}

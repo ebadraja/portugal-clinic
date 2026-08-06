@@ -5,7 +5,7 @@ This workspace contains two separate apps:
 | Folder | Stack | Purpose |
 |--------|--------|---------|
 | [`dental-website/`](./dental-website) | Astro + Tailwind | Marketing site for Clínica Dentária Nunes Monteiro |
-| [`pediatric-app/`](./pediatric-app) | Next.js + Prisma | Pediatric practice SaaS (Kids 0–18 CRM) |
+| [`booking-app/`](./booking-app) | Next.js + Prisma | Booking / practice SaaS |
 
 ## Dental website
 
@@ -15,10 +15,10 @@ npm install
 npm run dev
 ```
 
-## Pediatric app
+## Booking app
 
 ```bash
-cd pediatric-app
+cd booking-app
 npm install
 npm run dev
 ```

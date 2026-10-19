@@ -77,7 +77,7 @@ export function directoryWhere(q: DirectoryQuery, opts: { now: Date; recallMonth
   }
   if (q.ids) and.push({ id: { in: q.ids } })
   if (q.tag) and.push({ tags: { has: q.tag } })
-  if (q.recallDue) and.push(upcomingNone, { lastVisitAt: { lt: monthsAgo(opts.recallMonths, now) } })
+  if (q.recallDue) and.push(upcomingNone, { lastVisitAt: { lt: monthsAgo(opts.recallMonths, now) } }, { OR: [{ recallSnoozedUntil: null }, { recallSnoozedUntil: { lt: now } }] })
   if (q.upcoming === 'yes') and.push(upcomingSome)
   if (q.upcoming === 'no') and.push(upcomingNone)
   if (q.missing === 'dob') and.push({ dateOfBirth: null })
@@ -134,7 +134,7 @@ export async function listDirectory(q: DirectoryQuery, opts: { now?: Date; recal
       select: {
         id: true, firstName: true, lastName: true, phone: true, phone2: true, email: true, nif: true, dateOfBirth: true, birthDay: true, birthMonth: true,
         tags: true, allergies: true, medicalNotes: true, lastVisitAt: true, totalVisits: true, patientSince: true, preferredProvider: true, externalId: true,
-        smsRemindersEnabled: true,
+        smsRemindersEnabled: true, recallSnoozedUntil: true,
         appointments: {
           where: { startTime: { gt: now }, status: { in: [...ACTIVE] } },
           orderBy: { startTime: 'asc' },
@@ -170,7 +170,8 @@ export async function listDirectory(q: DirectoryQuery, opts: { now?: Date; recal
       noShows: p._count.appointments,
       nextAppointment: next ? { id: next.id, start: wall(next.startTime), type: next.type, provider: next.provider } : null,
       lifecycle: lifecycleOf({ lastVisitAt: p.lastVisitAt, patientSince: p.patientSince, hasUpcoming: !!next }, now),
-      recallDue: !next && !!p.lastVisitAt && p.lastVisitAt < recallBefore,
+      recallDue: !next && !!p.lastVisitAt && p.lastVisitAt < recallBefore && !(p.recallSnoozedUntil && p.recallSnoozedUntil > now),
+      recallSnoozedUntil: p.recallSnoozedUntil?.toISOString() ?? null,
       smsReminders: p.smsRemindersEnabled,
       fromZappy: !!p.externalId?.startsWith('zappy:'),
     }

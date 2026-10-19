@@ -38,6 +38,9 @@ Phases 1–4 are built, with both feature switches off. The steps to go live are
 | Settings: dentists' hours, colours, services; Agenda & Reminders tab | `components/settings/PracticeSettingsTab.tsx`, `AgendaRemindersTab.tsx` |
 | Attendance certificate | `/print/appointments/[id]/certificate` |
 | Zappy importer | `scripts/import-zappy.ts`, `lib/import/*`, `scripts/zappy-map.example.json` |
+| Waiting list (Phase 6 item, built early): patients who want a sooner time; freed times (cancellation, no-show, a selected free slot, "Free slots") list who fits, and booking from it moves their current appointment | `lib/appointments/waitlist.ts`, `waitlistMatch.ts`, `/api/agenda/waitlist`, `components/agenda/FrontDeskLists.tsx`, `WaitlistForm.tsx` |
+| Check-up calls: front-desk list of patients due a check-up; logging the call (no answer / call back / not now / declined) hides them for 1 week–1 year and leaves a note | `/api/patients/[id]/recall`, `Patient.recallSnoozedUntil`, `FrontDeskLists.tsx` |
+| Patient context while booking (alerts, last visit, what is already booked, latest note, usual dentist pre-selected) and patient notes in the appointment drawer | `/api/agenda/patients/[id]`, `PatientSnapshotCard.tsx` |
 
 **Where the build differs from this plan (simpler):**
 - **Dentists stay in `Settings.providers`** (validated JSON), extended with colour, working hours, types, AI-bookable and linked login. They don't move to a new `Provider` table. Every caller already loads that list, nothing needs backfilling, and appointments reference it through `providerId`.

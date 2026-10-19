@@ -6,6 +6,7 @@ import { APPOINTMENT_TYPE_KEYS, getClinicSettings } from "@/lib/clinic/settings"
 import { rescheduleAppointment, setAppointmentStatus, setCheckedIn, updateAppointmentDetails } from "@/lib/appointments/booking"
 import { bookingFailureResponse, staffActor } from "@/lib/appointments/http"
 import { loadAppointmentDetail } from "@/lib/appointments/agenda"
+import { markWaitlistBooked } from "@/lib/appointments/waitlist"
 
 export const dynamic = "force-dynamic"
 
@@ -40,6 +41,7 @@ const PatchSchema = z.discriminatedUnion("action", [
     durationMinutes: z.number().int().min(5).max(720).optional(),
     providerId: z.string().max(60).nullable().optional(),
     type: z.enum(APPOINTMENT_TYPE_KEYS).optional(),
+    waitlistEntryId: z.string().max(60).optional(),
     ...Common,
   }),
   z.object({
@@ -81,6 +83,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
             ? await setCheckedIn(id, body.arrived, actor)
             : await updateAppointmentDetails(id, { reason: body.reason, notes: body.notes }, actor)
     if (!r.ok) return bookingFailureResponse(r)
+    if (body.action === "move" && body.waitlistEntryId) await markWaitlistBooked(body.waitlistEntryId, id)
     return NextResponse.json({ id, warnings: r.warnings })
   } catch (error) {
     console.error("[PATCH /api/agenda/appointments/[id]]", error)

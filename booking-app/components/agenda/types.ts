@@ -134,6 +134,48 @@ export type BookingDraft = {
   type?: string
   durationMinutes?: number
   notes?: string
+  /** Booked from the waiting list: the entry is closed when the booking succeeds. */
+  waitlistEntryId?: string
 }
 
 export type AgendaView = "day" | "week" | "month" | "list"
+
+export type TimeOfDay = "ANY" | "MORNING" | "AFTERNOON"
+
+export type WaitlistItem = {
+  id: string
+  patientId: string
+  patientName: string
+  patientPhone: string | null
+  alerts: string[]
+  type: string | null
+  providerId: string | null
+  fromDate: string
+  untilDate: string | null
+  timeOfDay: TimeOfDay
+  notes: string | null
+  status: string
+  currentAppointmentId: string | null
+  /** Wall time of the appointment they want to bring forward. */
+  currentStart: string | null
+  createdAt: string
+}
+
+/** /api/agenda/patients/[id]: the patient as the desk needs them while booking. */
+export type PatientSnapshot = {
+  id: string
+  name: string
+  phone: string | null
+  phoneNote: string | null
+  email: string | null
+  dateOfBirth: string | null
+  alerts: { label: string; source: string }[]
+  tags: string[]
+  totalVisits: number
+  lastVisitAt: string | null
+  noShows: number
+  preferredProviderId: string | null
+  upcoming: { id: string; start: string; type: string; provider: string | null; status: AgendaStatus }[]
+  notes: { id: string; content: string; noteType: string; createdAt: string }[]
+  waitlist: WaitlistItem | null
+}

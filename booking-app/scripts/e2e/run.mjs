@@ -639,6 +639,47 @@ async function main() {
     }
     const ag2 = await admin.json(`/api/agenda?from=${future}&to=${future}`)
     check('imported bookings show in the agenda', ag2.data.appointments?.filter((a) => a.bookedVia === 'IMPORT').length === 2, String(ag2.data.appointments?.length))
+
+    // Waiting list: a patient wants a sooner time; a cancellation frees one; the agenda offers it to them
+    const wday = nextWeekday(12)
+    const later = nextWeekday(19)
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const cur = await admin.json('/api/agenda/appointments', { method: 'POST', body: { patientId: rz.id, date: later, time: '10:00', type: 'EVALUATION', notifyPatient: false, acknowledgeWarnings: true } })
+    const wl1 = await admin.json('/api/agenda/waitlist', { method: 'POST', body: { patientId: rz.id, fromDate: todayIso, timeOfDay: 'MORNING', currentAppointmentId: cur.data.id, notes: 'Pode vir em cima da hora' } })
+    check('add to the waiting list (201)', cur.status === 201 && wl1.status === 201 && wl1.data.created === true, JSON.stringify({ cur: cur.status, wl: wl1.data }).slice(0, 200))
+    const wl2 = await admin.json('/api/agenda/waitlist', { method: 'POST', body: { patientId: rz.id, fromDate: todayIso, timeOfDay: 'MORNING', currentAppointmentId: cur.data.id } })
+    check('…adding again updates the same entry (one per patient)', wl2.status === 200 && wl2.data.id === wl1.data.id && wl2.data.created === false)
+    const wlBad = await admin.json('/api/agenda/waitlist', { method: 'POST', body: { patientId: other.id, fromDate: todayIso, currentAppointmentId: cur.data.id } })
+    check("…refuses another patient's appointment (400)", wlBad.status === 400)
+    const freed = await admin.json('/api/agenda/appointments', { method: 'POST', body: { patientId: other.id, date: wday, time: '11:00', type: 'EVALUATION', notifyPatient: false, acknowledgeWarnings: true } })
+    await admin.json(`/api/agenda/appointments/${freed.data.id}`, { method: 'PATCH', body: { action: 'status', status: 'CANCELLED', notifyPatient: false } })
+    const fitAm = await admin.json(`/api/agenda/waitlist?date=${wday}&time=11:00&duration=30`)
+    check('a freed morning time lists the waiting patient', fitAm.status === 200 && fitAm.data.entries?.some((e) => e.id === wl1.data.id && e.currentStart === `${later}T10:00`), JSON.stringify(fitAm.data).slice(0, 300))
+    const fitPm = await admin.json(`/api/agenda/waitlist?date=${wday}&time=15:00&duration=30`)
+    check('…but not an afternoon one (they asked for mornings)', !fitPm.data.entries?.some((e) => e.id === wl1.data.id))
+    const fitLater = await admin.json(`/api/agenda/waitlist?date=${nextWeekday(28)}&time=09:00&duration=30`)
+    check('…nor a time later than the one they already have', !fitLater.data.entries?.some((e) => e.id === wl1.data.id))
+    const snap = await admin.json(`/api/agenda/patients/${rz.id}`)
+    check('booking snapshot shows alerts, what is booked and the waiting list', snap.status === 200 && Array.isArray(snap.data.alerts) && snap.data.upcoming?.some((u) => u.id === cur.data.id) && snap.data.waitlist?.id === wl1.data.id && Array.isArray(snap.data.notes), JSON.stringify(snap.data).slice(0, 300))
+    const take = await admin.json(`/api/agenda/appointments/${cur.data.id}`, { method: 'PATCH', body: { action: 'move', date: wday, time: '11:00', notifyPatient: false, acknowledgeWarnings: true, waitlistEntryId: wl1.data.id } })
+    const wlRow = (await db.query('select status, booked_appointment_id from waitlist_entries where id=$1', [wl1.data.id])).rows[0]
+    check('booking the freed time from the waiting list moves their appointment and closes the entry', take.status === 200 && wlRow?.status === 'BOOKED' && wlRow?.booked_appointment_id === cur.data.id, JSON.stringify({ take: take.data, wlRow }))
+    const wlAfter = await admin.json('/api/agenda/waitlist')
+    check('…and they leave the waiting list', wlAfter.status === 200 && !wlAfter.data.entries?.some((e) => e.id === wl1.data.id))
+
+    // Check-up calls: logging the call takes the patient off the list for a while and notes it
+    await db.query("update patients set last_visit_at = now() - interval '2 years' where id=$1", [other.id])
+    await db.query("update appointments set status='CANCELLED' where patient_id=$1 and start_time > now() and status in ('SCHEDULED','CONFIRMED')", [other.id])
+    const due1 = await admin.json('/api/patients/directory?recall=1&limit=100')
+    check('a patient last seen 2 years ago with nothing booked is due a check-up', due1.data.data?.some((p) => p.id === other.id))
+    const badCall = await admin.json(`/api/patients/${other.id}/recall`, { method: 'POST', body: { outcome: 'maybe' } })
+    check('an unknown call outcome is refused (400)', badCall.status === 400)
+    const logged = await admin.json(`/api/patients/${other.id}/recall`, { method: 'POST', body: { outcome: 'no_answer' } })
+    const due2 = await admin.json('/api/patients/directory?recall=1&limit=100')
+    const callNote = (await db.query("select count(*)::int as n from patient_notes where patient_id=$1 and note_type='FOLLOW_UP' and content like 'Check-up call: no answer%'", [other.id])).rows[0].n
+    check('logging "no answer" hides them for a week and notes it on the record', logged.status === 200 && !due2.data.data?.some((p) => p.id === other.id) && callNote === 1, JSON.stringify({ logged: logged.data, callNote }))
+    const agendaPage = await admin.req('/appointments?agenda=1')
+    check('/appointments?agenda=1 renders (200)', agendaPage.status === 200, String(agendaPage.status))
   }
 
   console.log('\n[14] Two-factor sign-in')

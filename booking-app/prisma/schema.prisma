@@ -425,9 +425,12 @@ model Patient {
   portalSessions PatientPortalSession[]
   smsOptOuts   SMSOptOut[]
   callbackRequests CallbackRequest[]
+  waitlistEntries  WaitlistEntry[]
   appointmentNotifications AppointmentNotification[]
   smsOptOut    Boolean @default(false) @map("sms_opt_out")
   privateMode  Boolean @default(false) @map("private_mode")
+  // Check-up recall: the desk called and wants the patient off the list until this date
+  recallSnoozedUntil DateTime? @map("recall_snoozed_until")
 
   @@index([phone])
   @@index([parentPhone2])
@@ -1396,4 +1399,30 @@ model CallbackRequest {
   @@index([status, urgency])
   @@index([createdAt])
   @@map("callback_requests")
+}
+
+// Waiting list ("lista de espera"): patients who want a slot sooner than the agenda offers.
+// When a time frees up, the agenda lists the entries that fit it (lib/appointments/waitlist.ts).
+model WaitlistEntry {
+  id         String           @id @default(cuid())
+  patientId  String           @map("patient_id")
+  patient    Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  type       AppointmentType? // null = any type
+  providerId String?          @map("provider_id") // Settings.providers id; null = any dentist
+  // Clinic dates "YYYY-MM-DD"; untilDate null = no limit
+  fromDate   String           @map("from_date")
+  untilDate  String?          @map("until_date")
+  timeOfDay  String           @default("ANY") @map("time_of_day") // ANY | MORNING | AFTERNOON
+  notes      String?
+  // Booked appointment the patient would like to bring forward (null = nothing booked yet)
+  currentAppointmentId String? @map("current_appointment_id")
+  status     String           @default("ACTIVE") // ACTIVE | BOOKED | REMOVED
+  bookedAppointmentId  String? @map("booked_appointment_id")
+  createdById String?         @map("created_by_id")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  @@index([status, fromDate])
+  @@index([patientId])
+  @@map("waitlist_entries")
 }

@@ -19,11 +19,12 @@ import { SidePanel } from "./SidePanel"
 import { AgendaSearch } from "./AgendaSearch"
 import { AgendaFilters } from "./AgendaFilters"
 import { MiniCalendar } from "./MiniCalendar"
+import { draftForEntry } from "./FrontDeskLists"
 import {
   CALENDAR_VIEW, EMPTY_FILTER, blockHtml, buildEvents, buildResources, closedWeekdays, eventHtml, eventTooltip, matchesFilter, rangeFor,
   rangeStats, timeBounds, type ColorBy, type EventFilter,
 } from "./calendarModel"
-import type { AgendaAppointment, AgendaBlock, AgendaPayload, AgendaView, BookingDraft, Issue } from "./types"
+import type { AgendaAppointment, AgendaBlock, AgendaPayload, AgendaView, BookingDraft, Issue, WaitlistItem } from "./types"
 import { ISSUE_LABEL } from "./strings"
 import { addDays, addMonths, fmt, fmtDayLong, fmtDayShort, fromCalendarDate, minutesBetween } from "./wall"
 
@@ -98,6 +99,8 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
   const [blockDraft, setBlockDraft] = useState<BlockDraft | null>(null)
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null)
   const [selectMenu, setSelectMenu] = useState<SelectMenu | null>(null)
+  // Waiting-list patients who fit the selected free time (offered in the selection menu).
+  const [selectFits, setSelectFits] = useState<WaitlistItem[]>([])
   const [bookingFor, setBookingFor] = useState(initialBookingFor)
   const loadedAt = useRef<string | null>(null)
 
@@ -231,13 +234,20 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
     const s = fromCalendarDate(info.start)
     const e = fromCalendarDate(info.end)
     const ev = info.jsEvent as MouseEvent
+    const providerId = info.resource?.id ? String(info.resource.id) : filter?.length === 1 ? filter[0] : null
+    setSelectFits([])
+    const params = new URLSearchParams({ date: s.date, time: s.time, duration: String(minutesBetween(`${s.date}T${s.time}`, `${e.date}T${e.time}`)), ...(providerId && providerId !== "__none" && { providerId }) })
+    fetch(`/api/agenda/waitlist?${params}`)
+      .then((r) => (r.ok ? r.json() : { entries: [] }))
+      .then((d) => setSelectFits(d.entries ?? []))
+      .catch(() => {})
     setSelectMenu({
       x: Math.min(ev.clientX ?? 200, window.innerWidth - 220),
       y: Math.min(ev.clientY ?? 200, window.innerHeight - 120),
       date: s.date,
       start: s.time,
       end: e.time,
-      providerId: info.resource?.id ? String(info.resource.id) : filter?.length === 1 ? filter[0] : null,
+      providerId,
     })
   }, [canWrite, filter])
 
@@ -493,7 +503,7 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
               readOnly={!canWrite}
               onOpen={setDrawerId}
               onChanged={refresh}
-              onPickSlot={(s) => openBooking({ date: s.date, time: s.time, providerId: s.providerId, type: s.type })}
+              onBook={(d) => canWrite && setBooking({ ...d, patient: d.patient ?? bookingFor })}
             />
           </div>
         )}
@@ -515,6 +525,16 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
             <button role="menuitem" className="rounded-md px-2 py-1.5 text-left hover:bg-muted" onClick={() => { setBlockDraft({ mode: "create", date: selectMenu.date, start: selectMenu.start, end: selectMenu.end, providerId: selectMenu.providerId }); setSelectMenu(null) }}>
               Block this time
             </button>
+            {selectFits.length > 0 && (
+              <>
+                <p className="mt-1 border-t border-border px-2 pt-1.5 text-xs text-muted-foreground">On the waiting list and fits</p>
+                {selectFits.slice(0, 4).map((w) => (
+                  <button key={w.id} role="menuitem" className="rounded-md px-2 py-1.5 text-left text-violet-800 hover:bg-violet-50 dark:text-violet-200 dark:hover:bg-violet-950/40" onClick={() => { setBooking(draftForEntry(w, { date: selectMenu.date, time: selectMenu.start, providerId: selectMenu.providerId === "__none" ? null : selectMenu.providerId }, w.type ?? "EVALUATION")); setSelectMenu(null) }}>
+                    Offer to {w.patientName}{w.currentStart ? <span className="block text-[11px] text-muted-foreground">has {fmtDayShort(w.currentStart.slice(0, 10))} {w.currentStart.slice(11, 16)}</span> : null}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </div>
       )}

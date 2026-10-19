@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, Loader2, Search, UserPlus, X } from "lucide-react"
+import { AlertTriangle, Hourglass, Loader2, Search, UserPlus, X } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import type { AgendaPayload, BookingDraft, Issue, PatientHit } from "./types"
 import { ISSUE_LABEL } from "./strings"
 import { fmtDayShort } from "./wall"
+import { PatientSnapshotCard, usePatientSnapshot } from "./PatientSnapshotCard"
+import { WaitlistForm } from "./WaitlistForm"
 
 type Props = {
   draft: BookingDraft | null
@@ -50,9 +52,14 @@ function BookingForm({ draft, payload, canDoubleBook, onClose, onDone }: Props &
   const [newP, setNewP] = useState({ firstName: "", lastName: "", phone: "", dateOfBirth: "", email: "" })
 
   const [type, setType] = useState(initialType)
-  const [providerId, setProviderId] = useState<string>(
-    draft.providerId && draft.providerId !== "__none" ? draft.providerId : providers.length === 1 ? providers[0].id : "",
-  )
+  const initialProvider = draft.providerId && draft.providerId !== "__none" ? draft.providerId : providers.length === 1 ? providers[0].id : ""
+  const [pickedProvider, setPickedProvider] = useState<string>(initialProvider)
+  // Until someone picks a dentist, the patient's usual dentist is suggested.
+  const [providerTouched, setProviderTouched] = useState(!!initialProvider)
+  const setProviderId = (id: string) => {
+    setProviderTouched(true)
+    setPickedProvider(id)
+  }
   const [date, setDate] = useState(draft.date)
   const [time, setTime] = useState(draft.time)
   const [duration, setDuration] = useState(draft.durationMinutes ?? types.find((x) => x.type === initialType)?.durationMinutes ?? 30)
@@ -64,7 +71,11 @@ function BookingForm({ draft, payload, canDoubleBook, onClose, onDone }: Props &
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<Problem | null>(null)
   const [suggestions, setSuggestions] = useState<{ date: string; time: string; providerId: string | null }[]>([])
+  const [waitlisting, setWaitlisting] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  const snap = usePatientSnapshot(patient?.id ?? null)
+  const usual = !providerTouched && snap?.preferredProviderId && providers.some((p) => p.id === snap.preferredProviderId) ? snap.preferredProviderId : null
+  const providerId = usual ?? pickedProvider
 
   useEffect(() => {
     if (draft.patient) return
@@ -168,12 +179,12 @@ function BookingForm({ draft, payload, canDoubleBook, onClose, onDone }: Props &
           ? await fetch(`/api/agenda/appointments/${draft.appointmentId}`, {
               method: "PATCH",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ action: "move", type, ...common }),
+              body: JSON.stringify({ action: "move", type, ...common, ...(draft.waitlistEntryId && { waitlistEntryId: draft.waitlistEntryId }) }),
             })
           : await fetch("/api/agenda/appointments", {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ patientId: p!.id, type, notes: notes.trim() || null, ...common, ...(repeat && { repeat: { everyWeeks, count } }) }),
+              body: JSON.stringify({ patientId: p!.id, type, notes: notes.trim() || null, ...common, ...(repeat && { repeat: { everyWeeks, count } }), ...(draft.waitlistEntryId && { waitlistEntryId: draft.waitlistEntryId }) }),
             })
       const data = await res.json().catch(() => ({}))
       if (res.status === 422) {
@@ -205,9 +216,23 @@ function BookingForm({ draft, payload, canDoubleBook, onClose, onDone }: Props &
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{fmtDayShort(date || draft.date)} · {time || draft.time}</DialogDescription>
+          <DialogDescription>
+            {fmtDayShort(date || draft.date)} · {time || draft.time}
+            {draft.waitlistEntryId && <span className="ml-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-xs text-violet-800 dark:bg-violet-950 dark:text-violet-200">from the waiting list</span>}
+          </DialogDescription>
         </DialogHeader>
 
+        {waitlisting && patient ? (
+          <WaitlistForm
+            payload={payload}
+            patient={patient}
+            type={type}
+            providerId={providerId || null}
+            current={draft.mode === "move" && draft.appointmentId ? { id: draft.appointmentId, start: `${draft.date}T${draft.time}` } : null}
+            onCancel={() => setWaitlisting(false)}
+            onDone={onDone}
+          />
+        ) : (
         <form
           className="grid gap-4"
           onSubmit={(e) => {
@@ -219,13 +244,16 @@ function BookingForm({ draft, payload, canDoubleBook, onClose, onDone }: Props &
           <div className="grid gap-1.5">
             <Label>Patient</Label>
             {patient ? (
-              <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-3 py-2">
-                <span className="font-medium">{patient.name}</span>
-                {draft.mode === "create" && (
-                  <Button type="button" variant="ghost" size="icon-sm" aria-label="Change patient" onClick={() => setPatient(null)}>
-                    <X />
-                  </Button>
-                )}
+              <div className="grid gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{patient.name}</span>
+                  {draft.mode === "create" && !draft.waitlistEntryId && (
+                    <Button type="button" variant="ghost" size="icon-sm" aria-label="Change patient" onClick={() => setPatient(null)}>
+                      <X />
+                    </Button>
+                  )}
+                </div>
+                <PatientSnapshotCard snap={snap} payload={payload} excludeAppointmentId={draft.appointmentId} />
               </div>
             ) : creating ? (
               <div className="grid gap-2 rounded-lg border border-border p-3">
@@ -261,6 +289,7 @@ function BookingForm({ draft, payload, canDoubleBook, onClose, onDone }: Props &
                           <span>
                             <span className="font-medium">{h.name}</span>
                             <span className="ml-2 text-xs text-muted-foreground">{h.phone ?? "no phone"}</span>
+                            {h.alerts.length > 0 && <span title={h.alerts.join(", ")} className="ml-1.5 rounded bg-red-100 px-1 text-[10px] font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">{h.alerts[0]}{h.alerts.length > 1 ? ` +${h.alerts.length - 1}` : ""}</span>}
                           </span>
                           <span className="text-xs text-muted-foreground">{h.dateOfBirth ? h.dateOfBirth.split("-").reverse().join("/") : "DOB missing"}</span>
                         </button>
@@ -297,7 +326,7 @@ function BookingForm({ draft, payload, canDoubleBook, onClose, onDone }: Props &
               </select>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="bk-provider">Dentist</Label>
+              <Label htmlFor="bk-provider">Dentist{usual && <span className="font-normal text-muted-foreground"> · their usual</span>}</Label>
               <select id="bk-provider" className={selectCls} value={providerId} onChange={(e) => setProviderId(e.target.value)}>
                 {providers.length !== 1 && <option value="">First available</option>}
                 {providerChoices.map((p) => (
@@ -400,13 +429,19 @@ function BookingForm({ draft, payload, canDoubleBook, onClose, onDone }: Props &
             </div>
           )}
 
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {patient && !draft.waitlistEntryId && (
+              <button type="button" onClick={() => setWaitlisting(true)} className="mr-auto flex items-center gap-1.5 text-sm text-violet-700 hover:underline dark:text-violet-300" title="No time suits them? Put them on the waiting list and the agenda will suggest them when a time frees up">
+                <Hourglass className="h-4 w-4" /> {draft.mode === "move" ? "Wants it sooner — waiting list" : "No good time? Waiting list"}
+              </button>
+            )}
             <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
             <Button type="submit" disabled={busy || !date || !time} className="min-w-28">
               {busy ? <Loader2 className="animate-spin" /> : draft.mode === "move" ? "Move" : repeat ? `Book ${count}` : "Book"}
             </Button>
           </div>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   )

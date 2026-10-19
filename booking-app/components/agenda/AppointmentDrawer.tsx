@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import {
-  AlertTriangle, Bell, CalendarClock, CalendarPlus, Check, CheckCheck, FileText, Loader2, Mail, MessageSquare,
-  Phone, PhoneCall, Printer, UserCheck, UserX, X,
+  AlertTriangle, Bell, CalendarClock, CalendarPlus, Check, CheckCheck, FileText, Hourglass, Loader2, Mail, MessageSquare,
+  Phone, PhoneCall, Printer, StickyNote, UserCheck, UserX, X,
 } from "lucide-react"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import type { AgendaPayload, AppointmentDetail, BookingDraft } from "./types"
+import type { AgendaPayload, AppointmentDetail, BookingDraft, WaitlistItem } from "./types"
+import { usePatientSnapshot } from "./PatientSnapshotCard"
+import { WaitlistForm } from "./WaitlistForm"
+import { draftForEntry } from "./FrontDeskLists"
 import { ACTOR_LABEL, EVENT_LABEL, NOTIFICATION_LABEL, SOURCE_LABEL, STATUS_LABEL } from "./strings"
 import { fmtDayLong, fmtTime } from "./wall"
 
@@ -24,6 +27,12 @@ type Props = {
 }
 
 const STEPS = ["SCHEDULED", "CONFIRMED", "ARRIVED", "COMPLETED"] as const
+
+const ZAPPY_PREFIX = "Importado do Zappy: "
+
+function monthYear(iso: string): string {
+  return new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" }).format(new Date(iso))
+}
 
 function when(iso: string) {
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso))
@@ -49,6 +58,11 @@ function DrawerBody({ id, payload, readOnly, onChanged, onMove, onBookNext }: Pr
   const [notifyCancel, setNotifyCancel] = useState(true)
   const [notes, setNotes] = useState("")
   const [notesDirty, setNotesDirty] = useState(false)
+  const [snapVersion, setSnapVersion] = useState(0)
+  const snap = usePatientSnapshot(detail?.patient.id ?? null, snapVersion)
+  const [patientNote, setPatientNote] = useState("")
+  const [waitlisting, setWaitlisting] = useState(false)
+  const [fits, setFits] = useState<{ key: string; entries: WaitlistItem[] } | null>(null)
 
   const load = useCallback(async (appointmentId: string) => {
     setLoading(true)
@@ -82,6 +96,46 @@ function DrawerBody({ id, payload, readOnly, onChanged, onMove, onBookNext }: Pr
       .finally(() => setLoading(false))
     return () => ctrl.abort()
   }, [id])
+
+  // A cancelled / no-show time that is still ahead: who on the waiting list could take it?
+  const freedKey = detail && (detail.status === "CANCELLED" || detail.status === "NO_SHOW") && detail.start >= `${payload.today}T00:00` ? `${detail.id}|${detail.status}` : null
+  useEffect(() => {
+    if (!freedKey || !detail) return
+    const ctrl = new AbortController()
+    const params = new URLSearchParams({ date: detail.start.slice(0, 10), time: fmtTime(detail.start), duration: String(detail.duration), ...(detail.providerId && { providerId: detail.providerId }) })
+    fetch(`/api/agenda/waitlist?${params}`, { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : { entries: [] }))
+      .then((x) => setFits({ key: freedKey, entries: (x.entries ?? []).filter((e: WaitlistItem) => e.patientId !== detail.patient.id) }))
+      .catch(() => {})
+    return () => ctrl.abort()
+  }, [freedKey, detail])
+  const freedFits = fits && fits.key === freedKey ? fits.entries : []
+
+  async function addPatientNote() {
+    if (!detail || !patientNote.trim()) return
+    setBusy("pnote")
+    try {
+      const res = await fetch(`/api/patients/${detail.patient.id}/notes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ content: patientNote.trim() }) })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Could not save the note")
+      setPatientNote("")
+      setSnapVersion((v) => v + 1)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function leaveWaitlist(id: string) {
+    setBusy("wl")
+    try {
+      await fetch(`/api/agenda/waitlist/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "REMOVED" }) })
+      setSnapVersion((v) => v + 1)
+      onChanged("Taken off the waiting list.")
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function patch(body: Record<string, unknown>, label: string, done: string) {
     if (!detail) return
@@ -161,6 +215,7 @@ function DrawerBody({ id, payload, readOnly, onChanged, onMove, onBookNext }: Pr
                   )}
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
+                  <span>{d.patient.lastVisitAt ? `Last seen ${monthYear(d.patient.lastVisitAt)}` : "No visits on record"}</span>
                   <span>{d.patient.totalVisits} visit{d.patient.totalVisits === 1 ? "" : "s"}</span>
                   {d.patient.noShows > 0 && <span className="text-red-600">{d.patient.noShows} no-show{d.patient.noShows === 1 ? "" : "s"}</span>}
                   {!d.patient.smsRemindersEnabled && <span>SMS reminders off</span>}
@@ -199,6 +254,24 @@ function DrawerBody({ id, payload, readOnly, onChanged, onMove, onBookNext }: Pr
                   <span className="font-medium">{STATUS_LABEL[d.status]}</span>
                   {d.cancelReason ? ` — ${d.cancelReason}` : ""}
                 </p>
+              )}
+
+              {!readOnly && freedFits.length > 0 && (
+                <div className="grid gap-1.5 rounded-xl border border-violet-200 bg-violet-50/60 p-3 text-sm dark:border-violet-900 dark:bg-violet-950/30">
+                  <p className="flex items-center gap-1.5 font-medium text-violet-900 dark:text-violet-200"><Hourglass className="h-4 w-4" /> Fill this time — on the waiting list and it suits them</p>
+                  <ul className="grid gap-1">
+                    {freedFits.slice(0, 5).map((w) => (
+                      <li key={w.id} className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate">
+                          {w.patientName}
+                          {w.currentStart && <span className="text-xs text-muted-foreground"> · has {fmtDayLong(w.currentStart.slice(0, 10))} {fmtTime(w.currentStart)}</span>}
+                        </span>
+                        {w.patientPhone && <a href={`tel:${w.patientPhone.replace(/\s+/g, "")}`} aria-label={`Call ${w.patientName}`} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><Phone className="h-4 w-4" /></a>}
+                        <Button size="sm" variant="outline" onClick={() => onBookNext(draftForEntry(w, { date: d.start.slice(0, 10), time: fmtTime(d.start), providerId: d.providerId }, w.type ?? d.type))}>Book</Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
 
               {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/40 dark:text-red-200">{error}</p>}
@@ -271,9 +344,68 @@ function DrawerBody({ id, payload, readOnly, onChanged, onMove, onBookNext }: Pr
                 </div>
               )}
 
+              {!readOnly && active && (
+                snap?.waitlist ? (
+                  <p className="flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-2 text-sm text-violet-900 dark:bg-violet-950/40 dark:text-violet-200">
+                    <Hourglass className="h-4 w-4 shrink-0" />
+                    <span className="flex-1">On the waiting list for a sooner time{snap.waitlist.notes ? ` — ${snap.waitlist.notes}` : ""}</span>
+                    <button type="button" disabled={busy === "wl"} onClick={() => leaveWaitlist(snap.waitlist!.id)} className="text-xs underline">Remove</button>
+                  </p>
+                ) : waitlisting ? (
+                  <WaitlistForm
+                    payload={payload}
+                    patient={{ id: d.patient.id, name: d.patient.name }}
+                    type={d.type}
+                    providerId={d.providerId}
+                    current={{ id: d.id, start: d.start }}
+                    onCancel={() => setWaitlisting(false)}
+                    onDone={(msg) => { setWaitlisting(false); setSnapVersion((v) => v + 1); onChanged(msg) }}
+                  />
+                ) : (
+                  <button type="button" onClick={() => setWaitlisting(true)} className="flex items-center gap-1.5 justify-self-start text-sm text-violet-700 hover:underline dark:text-violet-300">
+                    <Hourglass className="h-4 w-4" /> Wants it sooner? Add to the waiting list
+                  </button>
+                )
+              )}
+
+              {/* Patient notes (the record's, including those imported from Zappy) */}
+              <div className="grid gap-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Patient notes</span>
+                {snap === null ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : snap.notes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No notes on the record.</p>
+                ) : (
+                  <ul className="grid gap-1 text-sm">
+                    {snap.notes.map((n) => (
+                      <li key={n.id} className="flex items-start gap-1.5">
+                        <StickyNote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="flex-1 whitespace-pre-wrap">
+                          {n.content.startsWith(ZAPPY_PREFIX) ? n.content.slice(ZAPPY_PREFIX.length) : n.content}
+                          <span className="ml-1 text-xs text-muted-foreground">· {n.content.startsWith(ZAPPY_PREFIX) ? "from Zappy" : when(n.createdAt)}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {!readOnly && (
+                  <div className="flex gap-2">
+                    <input
+                      value={patientNote}
+                      onChange={(e) => setPatientNote(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void addPatientNote() } }}
+                      placeholder="Add a note to the patient's record"
+                      aria-label="New patient note"
+                      maxLength={5000}
+                      className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
+                    />
+                    <Button size="sm" variant="outline" disabled={busy === "pnote" || !patientNote.trim()} onClick={addPatientNote}>{busy === "pnote" ? <Loader2 className="animate-spin" /> : "Add"}</Button>
+                  </div>
+                )}
+                <Link href={`/patients/${d.patient.id}?tab=notes`} className="text-xs text-blue-700 hover:underline dark:text-blue-300">All notes</Link>
+              </div>
+
               {/* Notes */}
               <div className="grid gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notes</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notes for this appointment</span>
                 <Textarea rows={3} value={notes} readOnly={readOnly} onChange={(e) => { setNotes(e.target.value); setNotesDirty(true) }} placeholder="Internal notes for this appointment" />
                 {notesDirty && !readOnly && (
                   <Button size="sm" className="justify-self-end" disabled={!!busy} onClick={() => patch({ action: "details", notes: notes.trim() || null }, "notes", "Notes saved.")}>

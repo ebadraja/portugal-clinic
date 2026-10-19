@@ -4,6 +4,7 @@ import { requireStaff } from "@/lib/auth/guards"
 import { APPOINTMENT_TYPE_KEYS } from "@/lib/clinic/settings"
 import { createAppointment, createSeries } from "@/lib/appointments/booking"
 import { bookingFailureResponse, staffActor } from "@/lib/appointments/http"
+import { markWaitlistBooked } from "@/lib/appointments/waitlist"
 
 export const dynamic = "force-dynamic"
 
@@ -20,6 +21,8 @@ const CreateSchema = z.object({
   acknowledgeWarnings: z.boolean().optional(),
   notifyPatient: z.boolean().optional(),
   repeat: z.object({ everyWeeks: z.number().int().min(1).max(52), count: z.number().int().min(2).max(52) }).optional(),
+  /** Booked from the waiting list: that entry is closed once the booking succeeds. */
+  waitlistEntryId: z.string().max(60).optional(),
 })
 
 // ── POST /api/agenda/appointments ─────────────────────────────────────────────
@@ -34,16 +37,18 @@ export async function POST(req: NextRequest) {
     const issue = parsed.error.issues[0]
     return NextResponse.json({ error: `${issue?.path.join(".") || "body"}: ${issue?.message ?? "invalid"}` }, { status: 400 })
   }
-  const { repeat, ...input } = parsed.data
+  const { repeat, waitlistEntryId, ...input } = parsed.data
   try {
     const actor = staffActor(guard.user)
     if (repeat) {
       const r = await createSeries(input, repeat, actor)
       if ("ok" in r) return bookingFailureResponse(r)
+      if (waitlistEntryId && r.created[0]) await markWaitlistBooked(waitlistEntryId, r.created[0].id)
       return NextResponse.json({ seriesId: r.seriesId, created: r.created.map((a) => a.id), skipped: r.skipped }, { status: 201 })
     }
     const r = await createAppointment(input, actor)
     if (!r.ok) return bookingFailureResponse(r)
+    if (waitlistEntryId) await markWaitlistBooked(waitlistEntryId, r.appointment.id)
     return NextResponse.json({ id: r.appointment.id, warnings: r.warnings }, { status: 201 })
   } catch (error) {
     console.error("[POST /api/agenda/appointments]", error)

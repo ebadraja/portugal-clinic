@@ -164,12 +164,21 @@ function DrawerBody({ id, payload, readOnly, onChanged, onMove, onBookNext }: Pr
                   <span>{d.patient.totalVisits} visit{d.patient.totalVisits === 1 ? "" : "s"}</span>
                   {d.patient.noShows > 0 && <span className="text-red-600">{d.patient.noShows} no-show{d.patient.noShows === 1 ? "" : "s"}</span>}
                   {!d.patient.smsRemindersEnabled && <span>SMS reminders off</span>}
+                  {!d.patient.emailRemindersEnabled && <span>Email reminders off</span>}
                   {d.patient.importedFrom && <span>from {d.patient.importedFrom}</span>}
                 </div>
-                {d.patient.allergies && (
-                  <p className="flex items-start gap-1.5 rounded-md bg-red-50 px-2 py-1.5 text-red-800 dark:bg-red-950/40 dark:text-red-200">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> Allergies: {d.patient.allergies}
+                {d.patient.alerts.map((al) => (
+                  <p key={al.label} className="flex items-start gap-1.5 rounded-md bg-red-50 px-2 py-1.5 text-red-800 dark:bg-red-950/40 dark:text-red-200">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> <span><strong>{al.label}</strong> — {al.source}</span>
                   </p>
+                ))}
+                {d.patient.phoneNote && <p className="text-xs text-muted-foreground">Phone note: {d.patient.phoneNote}</p>}
+                {d.patient.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {d.patient.tags.map((t) => (
+                      <span key={t} className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{t}</span>
+                    ))}
+                  </div>
                 )}
                 {!d.patient.dateOfBirth && (
                   <p className="rounded-md bg-amber-50 px-2 py-1.5 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">Date of birth missing — confirm it at this visit.</p>

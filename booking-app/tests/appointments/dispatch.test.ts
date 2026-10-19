@@ -28,7 +28,7 @@ function row(over: Record<string, unknown> = {}) {
     id: 'n1', kind: 'REMINDER_DAY_BEFORE', channel: 'SMS', attempts: 1,
     dedupeKey: `a1:REMINDER_DAY_BEFORE:SMS:${START.toISOString()}`,
     appointment: { id: 'a1', startTime: START, endTime: new Date(START.getTime() + 30 * 60_000), status: 'SCHEDULED', provider: 'Dra. Ana Nunes' },
-    patient: { id: 'p1', firstName: 'Maria', phone: '912 345 678', email: 'maria@example.pt', smsRemindersEnabled: true },
+    patient: { id: 'p1', firstName: 'Maria', phone: '912 345 678', email: 'maria@example.pt', smsRemindersEnabled: true, emailRemindersEnabled: true },
     ...over,
   }
 }
@@ -144,6 +144,15 @@ describe('runDispatch', () => {
     expect(html).toContain('calendar.google.com')
     expect(html).toContain('/ics')
     expect(html).not.toMatch(/Avaliação|Higiene/) // no treatment details
+  })
+
+  it('a patient who refused email reminders (Zappy consent) gets no email', async () => {
+    const p = row().patient
+    m.prisma.appointmentNotification.findMany.mockResolvedValue([row({ channel: 'EMAIL', dedupeKey: `a1:REMINDER_DAY_BEFORE:EMAIL:${START.toISOString()}`, patient: { ...p, emailRemindersEnabled: false } })])
+    const s = senders()
+    await runDispatch({ now: NOW, settings: on, senders: s })
+    expect(s.email).not.toHaveBeenCalled()
+    expect(lastRelease().data.error).toMatch(/email reminders off/)
   })
 
   it('stale SENDING locks are released first', async () => {

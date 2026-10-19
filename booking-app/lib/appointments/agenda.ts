@@ -9,6 +9,7 @@ import { type ClinicSettings, closureOn, providerByName } from '@/lib/clinic/set
 import { addDays, dayBoundsUtc, utcToZoned } from '@/lib/clinic/time'
 import { digitsOnly } from '@/lib/clinic/phone'
 import { INACTIVE_STATUSES, busyFor, computeDaySlots, providerWindowsOn } from '@/lib/appointments/availability'
+import { birthdayOf, clinicalAlerts } from '@/lib/patients/alerts'
 
 export const MAX_RANGE_DAYS = 62
 
@@ -29,16 +30,19 @@ export function reminderState(rows: { status: string; deliveryStatus: string | n
   return 'pending'
 }
 
-function birthdayWithin(dob: Date | null, from: string, to: string): boolean {
-  if (!dob) return false
-  const md = dob.toISOString().slice(5, 10)
+function birthdayWithin(b: { month: number; day: number } | null, from: string, to: string): boolean {
+  if (!b) return false
+  const md = `${String(b.month).padStart(2, '0')}-${String(b.day).padStart(2, '0')}`
   for (let d = from; d <= to; d = addDays(d, 1)) if (d.slice(5, 10) === md) return true
   return false
 }
 
 const APPOINTMENT_INCLUDE = {
   patient: {
-    select: { id: true, firstName: true, lastName: true, phone: true, dateOfBirth: true, allergies: true, totalVisits: true },
+    select: {
+      id: true, firstName: true, lastName: true, phone: true, phone2: true, dateOfBirth: true, birthDay: true, birthMonth: true,
+      allergies: true, medicalNotes: true, tags: true, totalVisits: true,
+    },
   },
   notifications: { select: { status: true, deliveryStatus: true } },
 } satisfies Prisma.AppointmentInclude
@@ -53,7 +57,8 @@ export function serializeAgendaAppointment(a: AppointmentWithPatient, settings: 
     id: a.id,
     patientId: a.patientId,
     patientName: `${a.patient.firstName} ${a.patient.lastName}`.trim(),
-    patientPhone: a.patient.phone,
+    patientPhone: a.patient.phone ?? a.patient.phone2,
+    tags: a.patient.tags.slice(0, 5),
     start: wallClock(a.startTime, settings.timezone),
     end: wallClock(a.endTime, settings.timezone),
     startUtc: a.startTime.toISOString(),
@@ -72,8 +77,8 @@ export function serializeAgendaAppointment(a: AppointmentWithPatient, settings: 
     allowedOverlap: a.allowedOverlap,
     reminder: reminderState(a.notifications),
     alerts: {
-      allergy: !!a.patient.allergies?.trim(),
-      birthday: birthdayWithin(a.patient.dateOfBirth, weekStart, weekEnd),
+      clinical: clinicalAlerts(a.patient).map((x) => x.label),
+      birthday: birthdayWithin(birthdayOf(a.patient), weekStart, weekEnd),
       newPatient: a.patient.totalVisits === 0,
       dobMissing: !a.patient.dateOfBirth,
     },
@@ -146,8 +151,8 @@ export async function loadAppointmentDetail(id: string, settings: ClinicSettings
     include: {
       patient: {
         select: {
-          id: true, firstName: true, lastName: true, phone: true, email: true, dateOfBirth: true, allergies: true,
-          medicalNotes: true, totalVisits: true, lastVisitAt: true, nif: true, smsRemindersEnabled: true, externalId: true,
+          id: true, firstName: true, lastName: true, phone: true, phone2: true, phoneNote: true, email: true, dateOfBirth: true, allergies: true,
+          medicalNotes: true, totalVisits: true, lastVisitAt: true, nif: true, smsRemindersEnabled: true, emailRemindersEnabled: true, externalId: true, tags: true,
         },
       },
       events: { orderBy: { createdAt: 'asc' }, take: 200 },
@@ -196,8 +201,12 @@ export async function loadAppointmentDetail(id: string, settings: ClinicSettings
     patient: {
       id: a.patient.id,
       name: `${a.patient.firstName} ${a.patient.lastName}`.trim(),
-      phone: a.patient.phone,
+      phone: a.patient.phone ?? a.patient.phone2,
+      phoneNote: a.patient.phoneNote,
       email: a.patient.email,
+      tags: a.patient.tags,
+      alerts: clinicalAlerts(a.patient),
+      emailRemindersEnabled: a.patient.emailRemindersEnabled,
       dateOfBirth: a.patient.dateOfBirth?.toISOString().slice(0, 10) ?? null,
       allergies: a.patient.allergies,
       medicalAlert: a.patient.medicalNotes ? a.patient.medicalNotes.slice(0, 200) : null,
@@ -235,7 +244,7 @@ export async function loadAppointmentDetail(id: string, settings: ClinicSettings
 // ─── Patient search for the booking popover ──────────────────────────────────
 
 /** Every word must match a name, phone, NIF or email — "maria santos", "912 345", "2345678". */
-export async function searchPatients(q: string, limit = 8) {
+export async function searchPatients(q: string, limit = 8, opts: { withAppointments?: boolean; timeZone?: string } = {}) {
   const words = q.trim().split(/\s+/).filter((w) => w.length > 0).slice(0, 5)
   if (words.length === 0) return []
   const and: Prisma.PatientWhereInput[] = words.map((w) => {
@@ -245,7 +254,7 @@ export async function searchPatients(q: string, limit = 8) {
         { firstName: { contains: w, mode: 'insensitive' } },
         { lastName: { contains: w, mode: 'insensitive' } },
         { email: { contains: w, mode: 'insensitive' } },
-        ...(digits.length >= 3 ? [{ phone: { contains: digits } }, { nif: { contains: digits } }] : []),
+        ...(digits.length >= 3 ? [{ phone: { contains: digits } }, { phone2: { contains: digits } }, { nif: { contains: digits } }] : []),
       ],
     }
   })
@@ -259,12 +268,30 @@ export async function searchPatients(q: string, limit = 8) {
     where,
     take: limit,
     orderBy: [{ lastVisitAt: { sort: 'desc', nulls: 'last' } }, { lastName: 'asc' }],
-    select: { id: true, firstName: true, lastName: true, phone: true, dateOfBirth: true, preferredProvider: true, totalVisits: true },
+    select: {
+      id: true, firstName: true, lastName: true, phone: true, phone2: true, dateOfBirth: true, preferredProvider: true, totalVisits: true,
+      allergies: true, medicalNotes: true, tags: true,
+      ...(opts.withAppointments && {
+        appointments: {
+          where: { startTime: { gte: new Date(Date.now() - 365 * 86_400_000) }, status: { notIn: ['RESCHEDULED'] } },
+          orderBy: { startTime: 'desc' },
+          take: 6,
+          select: { id: true, startTime: true, type: true, status: true, provider: true },
+        },
+      }),
+    },
   })
+  const tz = opts.timeZone ?? 'Europe/Lisbon'
   return rows.map((p) => ({
+    alerts: clinicalAlerts(p).map((x) => x.label),
+    appointments: 'appointments' in p && Array.isArray(p.appointments)
+      ? (p.appointments as { id: string; startTime: Date; type: string; status: string; provider: string | null }[])
+          .map((a) => ({ id: a.id, start: wallClock(a.startTime, tz), type: a.type, status: a.status, provider: a.provider }))
+          .sort((x, y) => x.start.localeCompare(y.start))
+      : undefined,
     id: p.id,
     name: `${p.firstName} ${p.lastName}`.trim(),
-    phone: p.phone,
+    phone: p.phone ?? p.phone2,
     dateOfBirth: p.dateOfBirth?.toISOString().slice(0, 10) ?? null,
     preferredProvider: p.preferredProvider,
     totalVisits: p.totalVisits,
@@ -306,3 +333,22 @@ export async function findNextFreeSlots(input: {
     .slice(0, input.limit)
 }
 
+
+// ─── Mini calendar: appointments per day ─────────────────────────────────────
+
+export async function dayCounts(from: string, to: string, timeZone: string): Promise<Record<string, { booked: number; confirmed: number }>> {
+  const start = dayBoundsUtc(from, timeZone).start
+  const end = dayBoundsUtc(to, timeZone).end
+  const rows = await prisma.appointment.findMany({
+    where: { startTime: { gte: start, lt: end }, status: { in: ['SCHEDULED', 'CONFIRMED', 'COMPLETED'] } },
+    select: { startTime: true, status: true },
+  })
+  const out: Record<string, { booked: number; confirmed: number }> = {}
+  for (const r of rows) {
+    const d = utcToZoned(r.startTime, timeZone).date
+    out[d] ??= { booked: 0, confirmed: 0 }
+    out[d].booked++
+    if (r.status !== 'SCHEDULED') out[d].confirmed++
+  }
+  return out
+}

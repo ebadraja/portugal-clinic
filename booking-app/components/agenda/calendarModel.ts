@@ -6,6 +6,69 @@ import { DAY_NAMES, addDays, escapeHtml, fmtTime, hhmm, toMinutes, weekday } fro
 
 export type ColorBy = "type" | "provider"
 
+/** Agenda filters. Empty lists mean "all". */
+export type EventFilter = {
+  statuses: ("SCHEDULED" | "CONFIRMED" | "ARRIVED" | "COMPLETED" | "NO_SHOW" | "CANCELLED")[]
+  sources: ("STAFF" | "VOICE_AGENT" | "ONLINE" | "IMPORT")[]
+  types: string[]
+  alertsOnly: boolean
+}
+
+export const EMPTY_FILTER: EventFilter = { statuses: [], sources: [], types: [], alertsOnly: false }
+
+export function activeFilterCount(f: EventFilter): number {
+  return f.statuses.length + f.sources.length + f.types.length + (f.alertsOnly ? 1 : 0)
+}
+
+/** The status a person sees: "arrived" sits between confirmed and completed. */
+export function displayStatus(a: Pick<AgendaAppointment, "status" | "checkedInAt">): EventFilter["statuses"][number] | "RESCHEDULED" {
+  if (a.checkedInAt && (a.status === "SCHEDULED" || a.status === "CONFIRMED")) return "ARRIVED"
+  return a.status
+}
+
+export function sourceGroup(bookedVia: string): EventFilter["sources"][number] {
+  if (bookedVia === "VOICE_AGENT") return "VOICE_AGENT"
+  if (bookedVia === "IMPORT") return "IMPORT"
+  if (bookedVia === "WEBSITE" || bookedVia === "PATIENT_LINK" || bookedVia === "CHATBOT") return "ONLINE"
+  return "STAFF"
+}
+
+export function matchesFilter(a: AgendaAppointment, f: EventFilter): boolean {
+  const st = displayStatus(a)
+  if (f.statuses.length && !f.statuses.includes(st as EventFilter["statuses"][number])) return false
+  if (f.sources.length && !f.sources.includes(sourceGroup(a.bookedVia))) return false
+  if (f.types.length && !f.types.includes(a.type)) return false
+  if (f.alertsOnly && a.alerts.clinical.length === 0) return false
+  return true
+}
+
+/** Counts for the toolbar ("12 booked · 8 confirmed · 3 to confirm"). */
+export function rangeStats(appts: AgendaAppointment[]) {
+  const live = appts.filter((a) => a.status === "SCHEDULED" || a.status === "CONFIRMED" || a.status === "COMPLETED")
+  return {
+    total: live.length,
+    confirmed: live.filter((a) => a.status !== "SCHEDULED").length,
+    toConfirm: live.filter((a) => a.status === "SCHEDULED").length,
+    arrived: live.filter((a) => !!a.checkedInAt && a.status !== "COMPLETED").length,
+    noShows: appts.filter((a) => a.status === "NO_SHOW").length,
+    byAgent: live.filter((a) => a.bookedVia === "VOICE_AGENT").length,
+  }
+}
+
+/** Plain-text summary shown when hovering an appointment. */
+export function eventTooltip(a: AgendaAppointment, payload: AgendaPayload): string {
+  const type = payload.appointmentTypes.find((t) => t.type === a.type)?.label ?? a.type
+  return [
+    `${fmtTime(a.start)}–${fmtTime(a.end)} · ${a.patientName}`,
+    `${type}${a.provider ? ` · ${a.provider}` : ""}`,
+    `${STATUS_LABEL[displayStatus(a) === "ARRIVED" ? "CONFIRMED" : a.status] ?? a.status}${a.checkedInAt ? " · arrived" : ""} · ${SOURCE_LABEL[a.bookedVia] ?? a.bookedVia}`,
+    a.patientPhone ? `☎ ${a.patientPhone}` : "",
+    a.alerts.clinical.length ? `⚠ ${a.alerts.clinical.join(", ")}` : "",
+    a.notes ? `Notes: ${a.notes.slice(0, 160)}` : "",
+    REMINDER_LABEL[a.reminder],
+  ].filter(Boolean).join("\n")
+}
+
 export const CALENDAR_VIEW: Record<AgendaView, string> = {
   day: "resourceTimeGridDay",
   week: "timeGridWeek",
@@ -66,7 +129,7 @@ export function eventHtml(a: AgendaAppointment, payload: AgendaPayload, compact:
   if (a.bookedVia === "VOICE_AGENT") chips.push(`<span class="agenda-chip agenda-chip--ai" title="${escapeHtml(SOURCE_LABEL.VOICE_AGENT)}">AI</span>`)
   if (a.bookedVia === "WEBSITE" || a.bookedVia === "PATIENT_LINK") chips.push(`<span class="agenda-chip" title="Booked online">@</span>`)
   if (a.seriesId) chips.push(`<span class="agenda-chip" title="Part of a series">↻</span>`)
-  if (a.alerts.allergy) chips.push(`<span class="agenda-chip agenda-chip--warn" title="Allergies on file">!</span>`)
+  if (a.alerts.clinical.length) chips.push(`<span class="agenda-chip agenda-chip--alert" title="${escapeHtml(a.alerts.clinical.join(', '))}">!</span>`)
   if (a.alerts.birthday) chips.push(`<span class="agenda-chip" title="Birthday this week">🎂</span>`)
   if (a.alerts.newPatient) chips.push(`<span class="agenda-chip agenda-chip--new" title="First visit">New</span>`)
   if (a.allowedOverlap) chips.push(`<span class="agenda-chip agenda-chip--warn" title="Double-booked on purpose">2×</span>`)
@@ -117,7 +180,7 @@ function closedIntervals(date: string, payload: AgendaPayload, provider: AgendaP
 
 export function buildEvents(
   payload: AgendaPayload,
-  opts: { view: AgendaView; colorBy: ColorBy; filter: string[] | null; editable: boolean },
+  opts: { view: AgendaView; colorBy: ColorBy; filter: string[] | null; editable: boolean; eventFilter?: EventFilter },
 ): Calendar.EventInput[] {
   const providers = visibleProviders(payload, opts.filter)
   const ids = new Set(providers.map((p) => p.id))
@@ -127,6 +190,7 @@ export function buildEvents(
 
   for (const a of payload.appointments) {
     if (opts.filter && a.providerId && !ids.has(a.providerId)) continue
+    if (opts.eventFilter && !matchesFilter(a, opts.eventFilter)) continue
     const accent = accentFor(a, payload, opts.colorBy)
     const inactive = a.status === "CANCELLED" || a.status === "NO_SHOW" || a.status === "RESCHEDULED"
     out.push({

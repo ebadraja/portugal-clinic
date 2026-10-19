@@ -81,6 +81,7 @@
 .agenda-chip--ai { background: #6366f1; color: #fff; }
 .agenda-chip--warn { background: #f59e0b; color: #1f2937; }
 .agenda-chip--new { background: #0ea5e9; color: #fff; }
+.agenda-chip--alert { background: #dc2626; color: #fff; }
 
 .agenda-dot { width: 7px; height: 7px; border-radius: 9999px; display: inline-block; background: #94a3b8; }
 .agenda-dot--pending { background: transparent; box-shadow: inset 0 0 0 1.5px #94a3b8; }

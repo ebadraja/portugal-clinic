@@ -161,7 +161,7 @@ async function refreshVisitStats(tx: Prisma.TransactionClient, patientId: string
   await tx.patient.update({ where: { id: patientId }, data: { totalVisits: agg._count._all, lastVisitAt: agg._max.startTime } })
 }
 
-const PATIENT_CONTACT = { phone: true, email: true, smsRemindersEnabled: true } as const
+const PATIENT_CONTACT = { phone: true, email: true, smsRemindersEnabled: true, emailRemindersEnabled: true } as const
 
 // ─── Provider choice ─────────────────────────────────────────────────────────
 

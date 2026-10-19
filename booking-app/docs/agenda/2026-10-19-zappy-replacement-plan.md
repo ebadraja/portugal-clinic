@@ -47,6 +47,37 @@ Phases 1–4 are built, with both feature switches off. The steps to go live are
 
 ---
 
+## Zappy client export → CRM (real columns, 19 Oct)
+
+Zappy's client export has 44 columns. Each one goes to a field the agenda or patient record actually
+uses, or is deliberately dropped:
+
+| Zappy column(s) | CRM field | Where it shows up / what it drives |
+|---|---|---|
+| `nr` | `externalId = zappy:<nr>` | Makes re-imports idempotent; shown as "from Zappy" in the record |
+| `name`, `full_name` | `firstName`/`lastName` (from `name`; from `full_name` when `name` is just a first name), `invoiceName` = `full_name` when different | Everywhere; invoice name in the record |
+| `mobile`, `phone_main_note` | `phone` (E.164), `phoneNote` | SMS reminders, tap-to-call, caller-ID match for Acácia |
+| `phone_2`, `phone_2_note` | `phone2`, `phone2Note` | Record; used as the main phone when `mobile` is empty |
+| `email` | `email` | Email reminders |
+| `gender` | `gender` | Record |
+| `birth_day`, `birth_month`, `birth_year` | `dateOfBirth` when all three are present; otherwise `birthDay`/`birthMonth` | Acácia's identity check needs the full date. The birthday 🎂 in the agenda works with day + month only |
+| `vat_number` | `nif` (checksum-validated) | Search, invoices, certificate |
+| `address`, `zipcode`, `city` | `address`, `zipCode`, `city` | Record, certificate |
+| `segment_manual` | `tags[]` (one tag per segment) | Chips on the record and in the agenda drawer, patient-list filter. **Segments mentioning allergies, oncology, anticoagulants, heart, diabetes, pregnancy etc. raise a red clinical alert** on the agenda card and drawer. |
+| `segment_automatic` | not stored — recomputed | Active / lost / never came / new are derived from visits (patient-list filter) |
+| `crm_source`, `crm_referral`, `crm_referral_client_name` | `clientSource`, `referredBy` | Record; reports by origin |
+| `obs_1`, `obs_2`, `obs_3` | Patient notes "Importado do Zappy" | Record → Notes |
+| `invoice_obs` | `invoiceNotes` | Record |
+| `crm_work`, `crm_next_step`, `crm_next_step_date` | A **callback task** (Callbacks page) when the step is dated within the last 60 days or in the future; otherwise a note | Follow-up queue |
+| `loyaltycard_*` | Note when it has a value | (no loyalty module) |
+| `data_protection_type_*` (8 consents), `RGPD_updated_on` | `consents` JSON + `smsRemindersEnabled`/`emailRemindersEnabled`; a campaigns refusal becomes an email unsubscribe | Reminders are only sent on channels the patient allowed; consent panel in the record |
+| `createdon` | `patientSince` | Record, "new patient" filter |
+| `last_appointment_date` | `lastVisitAt` (unless imported bookings give a later one) | Patient list, recall list |
+| `next_appointment_date` | Checked against imported bookings. With `--create-next-from-clients`, creates the appointment when Zappy's booking list wasn't exported | Agenda |
+| `online` | dropped | (My Zappy app account) |
+
+---
+
 ## 1. What Zappy is, and which parts this clinic needs
 
 Zappy (Brightech, Portugal) is cloud booking software built mainly for beauty and aesthetics. It

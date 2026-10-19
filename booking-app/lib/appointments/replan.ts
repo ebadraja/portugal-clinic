@@ -22,7 +22,7 @@ export async function replanUpcoming(settings: ClinicSettings, now = new Date())
       orderBy: { id: 'asc' },
       take: 200,
       ...(cursor && { skip: 1, cursor: { id: cursor } }),
-      select: { id: true, patientId: true, startTime: true, patient: { select: { phone: true, email: true, smsRemindersEnabled: true } } },
+      select: { id: true, patientId: true, startTime: true, patient: { select: { phone: true, email: true, smsRemindersEnabled: true, emailRemindersEnabled: true } } },
     })
     if (batch.length === 0) break
     for (const a of batch) {

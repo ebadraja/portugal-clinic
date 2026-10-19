@@ -14,23 +14,54 @@ export const norm = (s: string) =>
 
 // ─── Columns ─────────────────────────────────────────────────────────────────
 
+// First alias = Zappy's own export header (backoffice → customers → export); the rest cover
+// other versions/languages and hand-made spreadsheets.
 export const CLIENT_COLUMNS = {
-  id: ['n cliente', 'no cliente', 'numero cliente', 'num cliente', 'id cliente', 'codigo cliente', 'cliente id', 'id', 'codigo', 'numero', 'client id', 'client number'],
-  name: ['nome completo', 'nome', 'cliente', 'name', 'full name'],
+  id: ['nr', 'n cliente', 'no cliente', 'numero cliente', 'num cliente', 'id cliente', 'codigo cliente', 'cliente id', 'id', 'codigo', 'numero', 'client id', 'client number'],
+  name: ['name', 'nome', 'cliente'],
+  fullName: ['full name', 'nome completo', 'nome para fatura', 'name for the invoice'],
   firstName: ['primeiro nome', 'nome proprio', 'first name'],
   lastName: ['apelido', 'apelidos', 'ultimo nome', 'last name', 'surname'],
-  phone: ['telemovel', 'tlm', 'telefone', 'contacto', 'telefone 1', 'mobile', 'phone'],
-  phone2: ['telefone 2', 'telefone fixo', 'outro telefone', 'phone 2'],
+  phone: ['mobile', 'telemovel', 'tlm', 'telefone', 'contacto', 'telefone 1', 'phone'],
+  phoneNote: ['phone main note', 'nota telemovel', 'cell phone note'],
+  phone2: ['phone 2', 'telefone 2', 'telefone fixo', 'outro telefone'],
+  phone2Note: ['phone 2 note', 'nota telefone 2'],
   email: ['email', 'e mail', 'correio eletronico'],
-  nif: ['nif', 'contribuinte', 'n contribuinte', 'no contribuinte', 'numero de contribuinte', 'vat', 'tax number'],
+  nif: ['vat number', 'nif', 'contribuinte', 'n contribuinte', 'no contribuinte', 'numero de contribuinte', 'vat', 'tax number', 'tax id cnpj'],
   dob: ['data de nascimento', 'data nascimento', 'nascimento', 'aniversario', 'date of birth', 'birthday', 'birth date'],
-  address: ['morada', 'endereco', 'address'],
-  postalCode: ['codigo postal', 'cod postal', 'cp', 'postal code', 'zip'],
-  city: ['localidade', 'cidade', 'city'],
-  gender: ['genero', 'sexo', 'gender'],
-  notes: ['observacoes', 'notas', 'obs', 'notes', 'comentarios'],
-  origin: ['origem', 'como nos conheceu', 'source', 'origin'],
-  marketingConsent: ['consentimento marketing', 'aceita marketing', 'rgpd marketing', 'marketing', 'consentimento rgpd', 'aceita comunicacoes'],
+  birthDay: ['birth day', 'dia nascimento', 'dia de nascimento'],
+  birthMonth: ['birth month', 'mes nascimento', 'mes de nascimento'],
+  birthYear: ['birth year', 'ano nascimento', 'ano de nascimento'],
+  address: ['address', 'morada', 'endereco'],
+  postalCode: ['zipcode', 'zip code', 'codigo postal', 'cod postal', 'cp', 'postal code', 'zip'],
+  city: ['city', 'localidade', 'cidade', 'location'],
+  gender: ['gender', 'genero', 'sexo', 'sex'],
+  segments: ['segment manual', 'segmentos', 'segments', 'outros segmentos'],
+  segmentAuto: ['segment automatic', 'segmento automatico'],
+  origin: ['crm source', 'origem', 'como nos conheceu', 'source', 'origin'],
+  referral: ['crm referral', 'referencia', 'recomendado'],
+  referralName: ['crm referral client name', 'recomendado por', 'referred by'],
+  notes: ['obs 1', 'observacoes', 'notas', 'obs', 'notes', 'comentarios'],
+  notes2: ['obs 2'],
+  notes3: ['obs 3'],
+  invoiceNotes: ['invoice obs', 'notes for the invoice', 'notas fatura'],
+  crmWork: ['crm work'],
+  crmNextStep: ['crm next step', 'proximo passo'],
+  crmNextStepDate: ['crm next step date', 'data proximo passo'],
+  loyaltyLabel: ['loyaltycard won label'],
+  loyaltyValue: ['loyaltycard won value'],
+  consentAppointments: ['data protection type appointments'],
+  consentCampaigns: ['data protection type campaigns', 'consentimento marketing', 'aceita marketing', 'rgpd marketing', 'marketing', 'consentimento rgpd', 'aceita comunicacoes'],
+  consentRecords: ['data protection type customer records'],
+  consentRemindersEmail: ['data protection type reminders email'],
+  consentRemindersSms: ['data protection type reminders sms'],
+  consentPhotos: ['data protection type share photos'],
+  consentPhotosNoFace: ['data protection type share photos no face'],
+  consentSurvey: ['data protection type survey'],
+  consentUpdatedOn: ['rgpd updated on'],
+  createdOn: ['createdon', 'created on', 'data de criacao', 'cliente desde'],
+  nextAppointment: ['next appointment date', 'proxima marcacao'],
+  lastAppointment: ['last appointment date', 'ultima marcacao'],
 } as const
 
 export const BOOKING_COLUMNS = {
@@ -162,6 +193,252 @@ export function parseGender(raw: string): 'MALE' | 'FEMALE' | 'OTHER' | null {
 export function refusesMarketing(raw: string): boolean {
   const t = norm(raw)
   return ['nao', 'n', 'no', 'false', '0', 'recusa', 'recusado', 'nao autoriza', 'nao aceita'].includes(t)
+}
+
+/**
+ * Consent cells: "1"/"0", "Sim"/"Não", "true"/"false", "Autorizado"/"Não autorizado",
+ * "yes"/"no". Empty or unknown → null (never assumed).
+ */
+export function parseConsent(raw: string): boolean | null {
+  const t = norm(raw)
+  if (!t) return null
+  if (/^(nao|n|no|false|0|recusa|recusado|nao autoriza|nao autorizado|nao aceita|revogado|denied|rejected)$/.test(t) || t.startsWith('nao ')) return false
+  if (/^(sim|s|yes|y|true|1|autoriza|autorizado|aceita|aceite|consentido|granted|accepted|ok)$/.test(t)) return true
+  return null
+}
+
+const MONTHS: Record<string, number> = {
+  janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
+  jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6, jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12,
+  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+  feb: 2, apr: 4, aug: 8, sep: 9, oct: 10, dec: 12,
+}
+
+/**
+ * Zappy stores the birthday as three fields; the year is optional ("Again" in the form).
+ * A full date only when all three make a real past date; otherwise day + month for the
+ * birthday alert.
+ */
+export function parseBirth(dayRaw: string, monthRaw: string, yearRaw: string, today: string): { date: string | null; day: number | null; month: number | null } {
+  const day = Number(dayRaw.trim()) || null
+  const m = norm(monthRaw)
+  const month = Number(m) || MONTHS[m] || MONTHS[m.slice(0, 3)] || null
+  const year = Number(yearRaw.trim()) || null
+  if (!day || !month || day > 31 || month > 12) return { date: null, day: null, month: null }
+  const probe = new Date(Date.UTC(year ?? 2000, month - 1, day))
+  if (probe.getUTCMonth() !== month - 1) return { date: null, day: null, month: null }
+  if (year && year >= 1900) {
+    const iso = probe.toISOString().slice(0, 10)
+    if (iso <= today) return { date: iso, day, month }
+  }
+  return { date: null, day, month }
+}
+
+/**
+ * Zappy "segmentos" cell → one tag per segment. Separated by "|", ";" or new lines; a single
+ * segment containing commas stays whole (clinical text often has commas).
+ */
+export function splitSegments(raw: string): string[] {
+  return raw
+    .split(/[|;\n]+/)
+    .map((s) => s.replace(/\s+/g, ' ').trim())
+    .filter((s) => s.length > 0)
+    .map((s) => s.slice(0, 200))
+}
+
+// ─── One client row ──────────────────────────────────────────────────────────
+
+export type Consents = {
+  appointments: boolean | null
+  campaigns: boolean | null
+  customerRecords: boolean | null
+  remindersEmail: boolean | null
+  remindersSms: boolean | null
+  sharePhotos: boolean | null
+  sharePhotosNoFace: boolean | null
+  survey: boolean | null
+  updatedAt: string | null
+}
+
+export type MappedClient = {
+  externalId: string | null
+  patient: {
+    firstName: string
+    lastName: string
+    phone: string | null
+    phoneNote: string | null
+    phone2: string | null
+    phone2Note: string | null
+    email: string | null
+    nif: string | null
+    dateOfBirth: Date | null
+    birthDay: number | null
+    birthMonth: number | null
+    gender: 'MALE' | 'FEMALE' | 'OTHER' | null
+    address: string | null
+    zipCode: string | null
+    city: string | null
+    invoiceName: string | null
+    invoiceNotes: string | null
+    clientSource: string | null
+    referredBy: string | null
+    tags: string[]
+    smsRemindersEnabled: boolean
+    emailRemindersEnabled: boolean
+    consents: Consents | null
+    patientSince: Date | null
+    lastVisitAt: Date | null
+  }
+  /** Free text for patient notes (obs_1..3, loyalty card, old CRM steps). */
+  notes: string[]
+  /** Zappy CRM "next step" still worth a callback (dated in the last 60 days or later). */
+  followUp: { reason: string; dueAt: Date | null } | null
+  refusesCampaigns: boolean
+  /** From next_appointment_date — to check against imported bookings. */
+  nextAppointment: { date: string; time: string | null } | null
+  warnings: string[]
+}
+
+type ClientCols = ColumnMap<typeof CLIENT_COLUMNS>
+
+function dateOnly(raw: string): Date | null {
+  const d = parseDate(raw)
+  return d ? new Date(`${d.date}T${d.time ?? '00:00'}:00Z`) : null
+}
+
+/** Maps one Zappy client row to CRM fields. Pure; `today` is the clinic date (YYYY-MM-DD). */
+export function mapClientRow(rec: Record<string, string>, cols: ClientCols, today: string): MappedClient | { reject: string } {
+  const get = (k: keyof typeof CLIENT_COLUMNS) => pick(rec, cols, k)
+  const warnings: string[] = []
+
+  // Name: Zappy "name" is what the clinic sees; "full_name" (invoice name) completes it when
+  // "name" is only a first name.
+  const shortName = get('name')
+  const fullName = get('fullName')
+  let source = shortName || fullName
+  const shortTokens = norm(shortName).split(' ').filter(Boolean)
+  const fullTokens = norm(fullName).split(' ').filter(Boolean)
+  if (shortTokens.length <= 1 && fullTokens.length > 1 && (!shortTokens.length || fullTokens[0] === shortTokens[0])) source = fullName
+  const split = cols.firstName ? { firstName: get('firstName'), lastName: get('lastName') } : splitName(source)
+  const firstName = titleCase(split.firstName)
+  const lastName = titleCase(split.lastName)
+  if (!firstName) return { reject: 'no name' }
+  if (!lastName) warnings.push('no surname')
+  const invoiceName = fullName && norm(fullName) !== norm(`${firstName} ${lastName}`) ? fullName.trim() : null
+
+  // Phones: mobile first; the second number fills in when there is no mobile.
+  const rawMobile = get('phone')
+  const rawPhone2 = get('phone2')
+  const mobile = rawMobile ? phoneE164(rawMobile) : null
+  const second = rawPhone2 ? phoneE164(rawPhone2) : null
+  if (rawMobile && !mobile) warnings.push(`mobile not recognised: ${rawMobile}`)
+  if (rawPhone2 && !second) warnings.push(`phone 2 not recognised: ${rawPhone2}`)
+  const phone = mobile ?? second
+  const phone2 = mobile ? second : null
+
+  const rawNif = get('nif').replace(/\D/g, '')
+  const nif = rawNif && isValidNif(rawNif) ? rawNif : null
+  if (rawNif && !nif) warnings.push(`invalid NIF ${rawNif}`)
+
+  // Birthday: three fields (Zappy) or one date column (other sources).
+  let dateOfBirth: Date | null = null
+  let birthDay: number | null = null
+  let birthMonth: number | null = null
+  if (cols.birthDay || cols.birthMonth) {
+    const b = parseBirth(get('birthDay'), get('birthMonth'), get('birthYear'), today)
+    if (b.date) dateOfBirth = new Date(`${b.date}T00:00:00Z`)
+    birthDay = b.day
+    birthMonth = b.month
+    if ((get('birthDay') || get('birthMonth')) && !b.day) warnings.push(`birthday not recognised: ${get('birthDay')}/${get('birthMonth')}/${get('birthYear')}`)
+  } else if (get('dob')) {
+    const d = parseDate(get('dob'))
+    if (d && d.date >= '1900-01-01' && d.date <= today) {
+      dateOfBirth = new Date(`${d.date}T00:00:00Z`)
+      birthDay = Number(d.date.slice(8, 10))
+      birthMonth = Number(d.date.slice(5, 7))
+    } else warnings.push(`date of birth not recognised: ${get('dob')}`)
+  }
+
+  const emailRaw = get('email').toLowerCase()
+  const email = emailRaw && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailRaw) ? emailRaw : null
+  if (emailRaw && !email) warnings.push(`email not valid: ${emailRaw}`)
+
+  // GDPR consents (only recorded when the export has them)
+  const consentCols = ['consentAppointments', 'consentCampaigns', 'consentRecords', 'consentRemindersEmail', 'consentRemindersSms', 'consentPhotos', 'consentPhotosNoFace', 'consentSurvey'] as const
+  const hasConsents = consentCols.some((k) => cols[k])
+  const consents: Consents | null = hasConsents
+    ? {
+        appointments: parseConsent(get('consentAppointments')),
+        campaigns: parseConsent(get('consentCampaigns')),
+        customerRecords: parseConsent(get('consentRecords')),
+        remindersEmail: parseConsent(get('consentRemindersEmail')),
+        remindersSms: parseConsent(get('consentRemindersSms')),
+        sharePhotos: parseConsent(get('consentPhotos')),
+        sharePhotosNoFace: parseConsent(get('consentPhotosNoFace')),
+        survey: parseConsent(get('consentSurvey')),
+        updatedAt: dateOnly(get('consentUpdatedOn'))?.toISOString() ?? null,
+      }
+    : null
+  // Reminders are only switched off on an explicit "no".
+  const smsRemindersEnabled = consents?.remindersSms !== false
+  const emailRemindersEnabled = consents?.remindersEmail !== false
+
+  const referralName = get('referralName')
+  const referral = get('referral')
+  const referredBy = referralName || (referral && !/^(0|1|sim|nao|não|yes|no|true|false)$/i.test(referral) ? referral : '') || null
+
+  // Notes and the old CRM task
+  const notes = [get('notes'), get('notes2'), get('notes3')].filter(Boolean)
+  const loyalty = [get('loyaltyLabel'), get('loyaltyValue')].filter(Boolean).join(': ')
+  if (loyalty) notes.push(`Cartão de fidelização Zappy — ${loyalty}`)
+  const step = get('crmNextStep')
+  const work = get('crmWork')
+  const stepDate = dateOnly(get('crmNextStepDate'))
+  let followUp: MappedClient['followUp'] = null
+  if (step || work) {
+    const reason = [step && `Próximo passo (Zappy): ${step}`, work && `Trabalho CRM: ${work}`].filter(Boolean).join(' · ')
+    const cutoff = new Date(`${today}T00:00:00Z`)
+    cutoff.setUTCDate(cutoff.getUTCDate() - 60)
+    if (step && (!stepDate || stepDate >= cutoff)) followUp = { reason, dueAt: stepDate }
+    else notes.push(`${reason}${stepDate ? ` (${stepDate.toISOString().slice(0, 10)})` : ''}`)
+  }
+
+  const next = parseDate(get('nextAppointment'))
+  return {
+    externalId: get('id') ? `zappy:${get('id')}` : null,
+    patient: {
+      firstName,
+      lastName,
+      phone,
+      phoneNote: get('phoneNote') || null,
+      phone2,
+      phone2Note: get('phone2Note') || null,
+      email,
+      nif,
+      dateOfBirth,
+      birthDay,
+      birthMonth,
+      gender: parseGender(get('gender')),
+      address: get('address') || null,
+      zipCode: get('postalCode') || null,
+      city: get('city') || null,
+      invoiceName,
+      invoiceNotes: get('invoiceNotes') || null,
+      clientSource: get('origin') || null,
+      referredBy,
+      tags: splitSegments(get('segments')),
+      smsRemindersEnabled,
+      emailRemindersEnabled,
+      consents,
+      patientSince: dateOnly(get('createdOn')),
+      lastVisitAt: dateOnly(get('lastAppointment')),
+    },
+    notes,
+    followUp,
+    refusesCampaigns: consents ? consents.campaigns === false : refusesMarketing(get('consentCampaigns')),
+    nextAppointment: next && next.date >= today ? next : null,
+    warnings,
+  }
 }
 
 // ─── Booking status ──────────────────────────────────────────────────────────

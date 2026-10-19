@@ -89,7 +89,7 @@ export async function runDispatch(opts: { now?: Date; settings?: ClinicSettings;
     where: { id: { in: ids } },
     include: {
       appointment: { select: { id: true, startTime: true, endTime: true, status: true, provider: true } },
-      patient: { select: { id: true, firstName: true, phone: true, email: true, smsRemindersEnabled: true } },
+      patient: { select: { id: true, firstName: true, phone: true, email: true, smsRemindersEnabled: true, emailRemindersEnabled: true } },
     },
   })
 
@@ -146,7 +146,7 @@ export async function runDispatch(opts: { now?: Date; settings?: ClinicSettings;
       if (await isPatientOptedOutByAnyRoute(row.patient.id, [to])) { await skip('patient opted out of SMS'); continue }
       outcome = await senders.sms(to, renderSms(kind, ctx), callbackUsable ? statusCallback : undefined)
     } else {
-      if (!row.patient.email) { await skip('no email address'); continue }
+      if (!row.patient.email || !row.patient.emailRemindersEnabled) { await skip('no email address / email reminders off'); continue }
       const m = renderEmail(kind, ctx)
       outcome = await senders.email(row.patient.email, m.subject, m.html, m.text)
     }

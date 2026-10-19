@@ -22,6 +22,7 @@ export type AgendaAppointment = {
   patientId: string
   patientName: string
   patientPhone: string | null
+  tags: string[]
   /** Clinic wall time "YYYY-MM-DDTHH:mm". */
   start: string
   end: string
@@ -40,7 +41,8 @@ export type AgendaAppointment = {
   seriesId: string | null
   allowedOverlap: boolean
   reminder: ReminderState
-  alerts: { allergy: boolean; birthday: boolean; newPatient: boolean; dobMissing: boolean }
+  /** clinical: condition labels (Allergy, Anticoagulated…) from allergies, notes and tags. */
+  alerts: { clinical: string[]; birthday: boolean; newPatient: boolean; dobMissing: boolean }
 }
 
 export type AgendaBlock = { id: string; providerId: string | null; start: string; end: string; kind: string; reason: string | null; seriesId: string | null }
@@ -87,7 +89,11 @@ export type AppointmentDetail = {
     id: string
     name: string
     phone: string | null
+    phoneNote: string | null
     email: string | null
+    tags: string[]
+    alerts: { label: string; source: string }[]
+    emailRemindersEnabled: boolean
     dateOfBirth: string | null
     allergies: string | null
     medicalAlert: string | null
@@ -104,7 +110,16 @@ export type AppointmentDetail = {
   notifications: { id: string; kind: string; channel: string; status: string; deliveryStatus: string | null; sendAt: string; sentAt: string | null; error: string | null }[]
 }
 
-export type PatientHit = { id: string; name: string; phone: string | null; dateOfBirth: string | null; preferredProvider: string | null; totalVisits: number }
+export type PatientHit = {
+  id: string
+  name: string
+  phone: string | null
+  dateOfBirth: string | null
+  preferredProvider: string | null
+  totalVisits: number
+  alerts: string[]
+  appointments?: { id: string; start: string; type: string; status: AgendaStatus; provider: string | null }[]
+}
 
 export type Issue = { reason: string; detail?: string }
 

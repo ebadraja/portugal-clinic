@@ -102,7 +102,7 @@ export function dedupeKey(appointmentId: string, kind: NotificationKind, channel
 export async function applyPlan(
   tx: Prisma.TransactionClient,
   appt: { id: string; patientId: string; startTime: Date },
-  patient: { phone: string | null; email: string | null; smsRemindersEnabled: boolean },
+  patient: { phone: string | null; email: string | null; smsRemindersEnabled: boolean; emailRemindersEnabled?: boolean },
   event: PlanEvent,
   settings: Pick<ClinicSettings, 'reminderPolicy' | 'timezone' | 'flags'>,
   now: Date,
@@ -116,7 +116,7 @@ export async function applyPlan(
   }
   const channels: Channel[] = []
   if (patient.phone && patient.smsRemindersEnabled) channels.push('SMS')
-  if (patient.email) channels.push('EMAIL')
+  if (patient.email && patient.emailRemindersEnabled !== false) channels.push('EMAIL')
   const plan = planMessages({ startTime: appt.startTime, event, policy: settings.reminderPolicy, timeZone: settings.timezone, now, channels })
   if (plan.length === 0) return 0
   const res = await tx.appointmentNotification.createMany({

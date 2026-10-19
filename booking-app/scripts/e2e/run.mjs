@@ -456,10 +456,19 @@ async function main() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zappy-'))
     const future = nextWeekday(9)
     const [fy, fm, fd] = future.split('-')
-    fs.writeFileSync(path.join(dir, 'clientes.csv'), '﻿Nº Cliente;Nome;Telemóvel;E-mail;Contribuinte;Data de Nascimento;Observações\r\n' +
-      '501;RITA FERREIRA;912 333 444;rita@example.pt;123456789;12/03/1985;Prefere manhãs\r\n' +
-      '502;Paulo Ramos;933 222 111;;;;\r\n' +
-      '503;Sem Telefone;;;;31/02/1990;\r\n')
+    // Zappy's real client export header (44 columns), ";"-separated as Excel saves it in Portugal.
+    const ZH = 'nr;name;email;mobile;phone_main_note;phone_2;phone_2_note;online;gender;birth_month;birth_day;birth_year;vat_number;full_name;address;zipcode;city;segment_automatic;segment_manual;crm_source;crm_referral;crm_referral_client_name;obs_1;obs_2;obs_3;invoice_obs;crm_work;crm_next_step;crm_next_step_date;loyaltycard_won_label;loyaltycard_won_value;data_protection_type_appointments;data_protection_type_campaigns;data_protection_type_customer_records;data_protection_type_reminders_email;data_protection_type_reminders_sms;data_protection_type_share_photos;data_protection_type_share_photos_no_face;data_protection_type_survey;RGPD_updated_on;createdon;next_appointment_date;last_appointment_date'.split(';')
+    const zrow = (v) => ZH.map((h) => v[h] ?? '').join(';')
+    const nextDay = nextWeekday(12)
+    fs.writeFileSync(path.join(dir, 'clientes.csv'), '﻿' + ZH.join(';') + '\r\n' + [
+      zrow({ nr: '501', name: 'RITA FERREIRA', email: 'rita@example.pt', mobile: '912 333 444', gender: 'F', birth_month: '3', birth_day: '12', birth_year: '1985', vat_number: '123456789',
+        segment_automatic: 'Cliente Ativo', segment_manual: 'PCTE ONCOLÓGICA. ALERGICA AO ACIDO CLAVULANICO|VIP', crm_source: 'Instagram', obs_1: 'Prefere manhãs',
+        crm_next_step: 'Ligar para marcar destartarização', crm_next_step_date: nextDay, data_protection_type_campaigns: 'Não', data_protection_type_reminders_sms: '0',
+        data_protection_type_reminders_email: '1', RGPD_updated_on: '2024-05-10', createdon: '2019-02-01', last_appointment_date: '2025-01-10' }),
+      zrow({ nr: '502', name: 'Paulo Ramos', full_name: 'Paulo Jorge Ramos', phone_2: '933 222 111', phone_2_note: 'casa', birth_month: 'Maio', birth_day: '5',
+        next_appointment_date: `${nextDay} 15:00`, createdon: '2021-06-01' }),
+      zrow({ nr: '503', name: 'Sem Telefone', birth_month: '2', birth_day: '31', birth_year: '1990' }),
+    ].join('\r\n') + '\r\n')
     fs.writeFileSync(path.join(dir, 'marcacoes.csv'), 'ID;Data;Hora Início;Hora Fim;Nº Cliente;Cliente;Serviço;Colaborador;Estado\r\n' +
       `9001;${fd}/${fm}/${fy};10:30;11:15;501;Rita Ferreira;Destartarização;Ana Nunes;Confirmada\r\n` +
       `9002;${fd}/${fm}/${fy};11:30;12:00;502;Paulo Ramos;Botox;;Aguarda confirmação\r\n` +
@@ -476,10 +485,10 @@ async function main() {
     const afterDry = await countZ()
     check('dry run writes nothing', afterDry.p === 0 && afterDry.a === 0, JSON.stringify(afterDry))
     check('dry run lists the unknown service', /Botox/.test(dry.stdout))
-    const commit = runImport(['--commit'])
+    const commit = runImport(['--commit', '--create-next-from-clients'])
     check('import commit succeeds', commit.status === 0, (commit.stderr || commit.stdout).slice(-400))
     const afterCommit = await countZ()
-    check('3 clients and 4 bookings imported', afterCommit.p === 3 && afterCommit.a === 4, JSON.stringify(afterCommit))
+    check('3 clients, 4 bookings + 1 appointment known only from the client record', afterCommit.p === 3 && afterCommit.a === 5, JSON.stringify(afterCommit))
     const rita = (await db.query("select id, phone, nif, to_char(date_of_birth,'YYYY-MM-DD') as dob, total_visits from patients where external_id='zappy:501'")).rows[0]
     check('client fields mapped (E.164 phone, valid NIF, DOB, visits recounted)', rita?.phone === '+351912333444' && rita.nif === '123456789' && rita.dob === '1985-03-12' && rita.total_visits === 1, JSON.stringify(rita))
     const bad = (await db.query("select date_of_birth from patients where external_id='zappy:503'")).rows[0]
@@ -490,9 +499,95 @@ async function main() {
     check('unknown service → OTHER, no dentist', by['zappy:9002']?.type === 'OTHER' && by['zappy:9002'].provider_id === null, JSON.stringify(by['zappy:9002']))
     check('past confirmed → COMPLETED; "Faltou" → NO_SHOW', by['zappy:9003']?.status === 'COMPLETED' && by['zappy:9004']?.status === 'NO_SHOW')
     check('imported bookings marked IMPORT and never messaged', appts.every((a) => a.booked_via === 'IMPORT') && (await db.query("select count(*)::int as n from appointment_notifications n join appointments a on a.id=n.appointment_id where a.external_id like 'zappy:%'")).rows[0].n === 0)
-    const again = runImport(['--commit'])
+    const again = runImport(['--commit', '--create-next-from-clients'])
     const afterAgain = await countZ()
-    check('second import (cutover delta) creates no duplicates', again.status === 0 && afterAgain.p === 3 && afterAgain.a === 4, JSON.stringify(afterAgain))
+    check('second import (cutover delta) creates no duplicates', again.status === 0 && afterAgain.p === 3 && afterAgain.a === 5, JSON.stringify(afterAgain))
+    check('…and no duplicate notes or follow-ups', (await db.query("select (select count(*)::int from patient_notes where content like 'Importado do Zappy%') as n, (select count(*)::int from callback_requests where source='IMPORT') as c")).rows[0].n === 1)
+
+    // Zappy-specific fields
+    const rz = (await db.query("select id, tags, sms_reminders_enabled, email_reminders_enabled, consents, client_source, to_char(patient_since,'YYYY-MM-DD') as since, to_char(last_visit_at,'YYYY-MM-DD') as last from patients where external_id='zappy:501'")).rows[0]
+    check('segments → tags', JSON.stringify(rz.tags) === JSON.stringify(['PCTE ONCOLÓGICA. ALERGICA AO ACIDO CLAVULANICO', 'VIP']), JSON.stringify(rz.tags))
+    check('SMS consent "0" → SMS reminders off; email stays on', rz.sms_reminders_enabled === false && rz.email_reminders_enabled === true)
+    check('consents stored with their date', rz.consents?.campaigns === false && rz.consents?.updatedAt?.startsWith('2024-05-10'), JSON.stringify(rz.consents))
+    check('origin, patient since and last visit kept', rz.client_source === 'Instagram' && rz.since === '2019-02-01' && rz.last === '2025-01-10', JSON.stringify(rz))
+    const unsub = (await db.query('select count(*)::int as n from unsubscribes where patient_id=$1', [rz.id])).rows[0].n
+    check('campaigns "Não" → unsubscribed from marketing', unsub === 1)
+    const cbz = (await db.query("select reason, to_char(due_at,'YYYY-MM-DD') as due from callback_requests where source='IMPORT' and patient_id=$1", [rz.id])).rows[0]
+    check('CRM next step → callback task with its date', cbz?.reason?.includes('Ligar para marcar') && cbz.due === nextDay, JSON.stringify(cbz))
+    const pz = (await db.query("select phone, phone2, phone2_note, invoice_name, birth_day, birth_month, date_of_birth from patients where external_id='zappy:502'")).rows[0]
+    check('only phone_2 → main phone; full_name → invoice name; birthday without year', pz.phone === '+351933222111' && pz.invoice_name === 'Paulo Jorge Ramos' && pz.birth_day === 5 && pz.birth_month === 5 && pz.date_of_birth === null, JSON.stringify(pz))
+    const nextA = (await db.query("select start_time from appointments where external_id like 'zappy:next:%'")).rows
+    check('next_appointment_date created as an appointment (flag on)', nextA.length === 1)
+
+    // Agenda shows the clinical alert raised by the Zappy segment
+    const agR = await admin.json(`/api/agenda?from=${future}&to=${future}`)
+    const ritaAppt = agR.data.appointments?.find((a) => a.patientName.startsWith('Rita'))
+    check('agenda card carries clinical alerts from segments', JSON.stringify(ritaAppt?.alerts?.clinical) === JSON.stringify(['Allergy', 'Oncology']), JSON.stringify(ritaAppt?.alerts))
+    const detR = await admin.json(`/api/agenda/appointments/${ritaAppt?.id}`)
+    check('drawer shows tags and the alert sources', detR.data.patient?.tags?.length === 2 && detR.data.patient?.alerts?.[0]?.source?.includes('ALERGICA'))
+
+    // Agenda search + mini calendar
+    const sr = await admin.json(`/api/agenda/patients?withAppointments=1&q=${encodeURIComponent('rita ferreira')}`)
+    const hit = sr.data.patients?.[0]
+    check('agenda search returns the patient with appointments to jump to', hit?.appointments?.some((a) => a.start.startsWith(future)) && hit.alerts.includes('Oncology'), JSON.stringify(hit).slice(0, 300))
+    const sm = await admin.json(`/api/agenda/summary?from=${future}&to=${future}`)
+    check('mini calendar counts per day', sm.status === 200 && sm.data.days?.[future]?.booked >= 2, JSON.stringify(sm.data))
+
+    // Patient directory
+    const dirAll = await admin.json('/api/patients/directory?q=ferreira')
+    check('directory search by surname', dirAll.data.data?.some((p) => p.name === 'Rita Ferreira' && p.alerts.includes('Oncology') && p.nextAppointment), JSON.stringify(dirAll.data).slice(0, 300))
+    const dirPhone = await admin.json('/api/patients/directory?q=933222111')
+    check('directory search by second phone', dirPhone.data.data?.[0]?.name === 'Paulo Ramos', JSON.stringify(dirPhone.data.data?.map((p) => p.name)))
+    const dirTag = await admin.json(`/api/patients/directory?tag=${encodeURIComponent('VIP')}`)
+    check('directory tag filter', dirTag.data.data?.length === 1 && dirTag.data.data[0].name === 'Rita Ferreira')
+    const dirNoDob = await admin.json('/api/patients/directory?missing=dob')
+    check('directory "no date of birth" filter', dirNoDob.data.data?.some((p) => p.name === 'Paulo Ramos') && !dirNoDob.data.data?.some((p) => p.name === 'Rita Ferreira'))
+    const summary = await admin.json('/api/patients/directory/summary')
+    check('directory summary: counts and tags', summary.status === 200 && summary.data.counts.all >= 3 && summary.data.tags.some((t) => t.tag === 'VIP'), JSON.stringify(summary.data.counts))
+
+    // Profile edits
+    const badNif = await admin.json(`/api/patients/${rz.id}/profile`, { method: 'PATCH', body: { nif: '123456780' } })
+    check('profile refuses an invalid NIF', badNif.status === 400, String(badNif.status))
+    const prof = await admin.json(`/api/patients/${rz.id}/profile`, { method: 'PATCH', body: { tags: ['VIP', 'Ortodontia'], consents: { remindersSms: true } } })
+    check('profile saves tags and turns SMS reminders back on via consent', prof.status === 200 && prof.data.smsRemindersEnabled === true && prof.data.tags.includes('Ortodontia'), JSON.stringify(prof.data).slice(0, 200))
+    for (const pg of ['/patients', `/patients/${rz.id}`]) {
+      const res = await admin.req(pg)
+      check(`${pg} renders (200)`, res.status === 200, String(res.status))
+    }
+
+    // Upload from Patients → "Import from Zappy" (same code as the script, over HTTP)
+    const upload = async (session, files, fields = {}) => {
+      const fd = new FormData()
+      for (const [k, v] of Object.entries(files)) fd.append(k, new Blob([v], { type: 'text/csv' }), `${k}.csv`)
+      for (const [k, v] of Object.entries(fields)) fd.append(k, v)
+      const res = await fetch(BASE + '/api/patients/import/zappy', { method: 'POST', body: fd, headers: session ? { cookie: session.header() } : {}, redirect: 'manual' })
+      const text = await res.text()
+      let data = null
+      try { data = JSON.parse(text) } catch { data = text }
+      return { status: res.status, data }
+    }
+    const upCsv = '﻿' + ZH.join(';') + '\r\n' + [
+      zrow({ nr: '601', name: 'Helena Duarte', mobile: '961 000 111', vat_number: '123456780', segment_manual: 'Toma Xarelto' }),
+      zrow({ nr: '602', name: 'Bruno Alves', mobile: '962 000 222', birth_day: '1', birth_month: '1', birth_year: '1980' }),
+      zrow({ nr: '603' }),
+    ].join('\r\n') + '\r\n'
+    const anonUp = await upload(null, { clients: upCsv })
+    check('upload refused without a staff session', [302, 303, 307, 401].includes(anonUp.status), String(anonUp.status))
+    const prev = await upload(admin, { clients: upCsv })
+    check('upload preview (200) counts new patients', prev.status === 200 && prev.data.counts?.['clients.created'] === 2 && prev.data.counts?.['clients.rejected'] === 1, JSON.stringify(prev.data?.counts ?? prev.data))
+    check('preview lists the rows to look at (invalid NIF, no name)', prev.data.problemCount === 2 && prev.data.problems.some((r) => /invalid NIF/.test(r.detail)), JSON.stringify(prev.data.problems))
+    const notYet = (await db.query("select count(*)::int as n from patients where external_id in ('zappy:601','zappy:602')")).rows[0].n
+    check('preview writes nothing', notYet === 0, String(notYet))
+    const imp = await upload(admin, { clients: upCsv }, { commit: '1' })
+    check('upload import completes', imp.status === 200 && imp.data.complete === true && imp.data.counts['clients.created'] === 2, JSON.stringify(imp.data?.counts ?? imp.data))
+    const helena = (await db.query("select nif, tags from patients where external_id='zappy:601'")).rows[0]
+    check('uploaded patient stored (invalid NIF left empty, segment kept)', helena && helena.nif === null && helena.tags[0] === 'Toma Xarelto', JSON.stringify(helena))
+    const again2 = await upload(admin, { clients: upCsv }, { commit: '1' })
+    check('uploading the same file again changes nothing', again2.data.counts['clients.created'] === undefined && again2.data.counts['clients.unchanged'] === 2, JSON.stringify(again2.data.counts))
+    const badMap = await upload(admin, { clients: upCsv }, { map: JSON.stringify({ staff: { X: 'no-such-dentist' } }) })
+    check('a mapping to an unknown dentist is refused (400)', badMap.status === 400 && /unknown dentist/.test(badMap.data.error), JSON.stringify(badMap.data))
+    const helenaDir = await admin.json('/api/patients/directory?q=helena')
+    check('imported patient appears in the directory with her clinical alert', helenaDir.data.data?.[0]?.alerts?.includes('Anticoagulated'), JSON.stringify(helenaDir.data.data?.[0]))
     const ag2 = await admin.json(`/api/agenda?from=${future}&to=${future}`)
     check('imported bookings show in the agenda', ag2.data.appointments?.filter((a) => a.bookedVia === 'IMPORT').length === 2, String(ag2.data.appointments?.length))
   }

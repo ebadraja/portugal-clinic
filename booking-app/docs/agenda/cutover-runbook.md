@@ -41,7 +41,26 @@ by default (Settings → Agenda & Reminders).
    last 2–3 years plus everything in the future. Open each in Excel and use **Save As → CSV UTF-8**.
    If the appointments export isn't available, ask Zappy support for it (or for a Public API key).
    Under GDPR art. 20 the clinic is entitled to its data in a machine-readable format.
-2. Copy `scripts/zappy-map.example.json` to `scripts/zappy-map.json`.
+   The **client export** (customers → export) has Zappy's 44 columns (`nr`, `name`, `mobile`,
+   `segment_manual`, `data_protection_type_*`, …). The importer recognises all of them. What each
+   column becomes is in the plan, under "Zappy client export → CRM". Points to check in the dry-run
+   report:
+   - **Segments** become tags. Segments that mention allergies, oncology, anticoagulants etc. show as
+     red clinical alerts in the agenda and on the patient record.
+   - **Consents:** a "no" to SMS or email reminders switches that channel off for the patient. A
+     "no" to campaigns unsubscribes them from marketing email.
+   - A **CRM "next step"** dated in the last 60 days or later becomes a task on the Callbacks page.
+   - If Zappy can't export the **appointment list**, add `--create-next-from-clients`. Upcoming
+     appointments that have a time in `next_appointment_date` are then created (type `defaultType`,
+     dentist `defaultProviderId` from the mapping file). Check them in the agenda afterwards.
+   **Easiest: Patients → "Import from Zappy"** (admins). Upload the CSV(s) and click **Check
+   files**. The preview shows what will be created or updated, the rows to look at (download them),
+   and any Zappy services or staff the CRM doesn't know yet, with dropdowns to match them. Nothing
+   is saved until you click **Import**. Large files import in rounds; keep the window open until it
+   says complete. Files up to 4 MB each; for bigger exports, export one year at a time or use the
+   script below. The upload and the script run the same code.
+2. Copy `scripts/zappy-map.example.json` to `scripts/zappy-map.json` (script only; the upload
+   window remembers your matches in the browser).
 3. Dry run against a **Neon branch** (a free copy of production: Neon console → Branches → Create),
    with `DATABASE_URL` pointing at the branch:
    ```bash

@@ -20,6 +20,7 @@ import AddAppointmentModal from "@/components/add-appointment-modal";
 import AddNotesModal from "@/components/add-notes-modal";
 import UploadDocumentsModal from "@/components/upload-documents-modal";
 import { PatientGdprActions } from "@/components/patients/gdpr-actions";
+import { PatientProfilePanel, type ProfileFields } from "@/components/patients/PatientProfilePanel";
 import { format } from "date-fns";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -58,6 +59,22 @@ interface Patient {
   raceEthnicity: string | null;
   membershipStatus: string | null;
   privateMode: boolean;
+  // Agenda / Zappy fields (PATCH /api/patients/[id]/profile)
+  tags: string[];
+  phoneNote: string | null;
+  phone2: string | null;
+  phone2Note: string | null;
+  nif: string | null;
+  invoiceName: string | null;
+  invoiceNotes: string | null;
+  referredBy: string | null;
+  clientSource: string | null;
+  birthDay: number | null;
+  birthMonth: number | null;
+  smsRemindersEnabled: boolean;
+  emailRemindersEnabled: boolean;
+  consents: Record<string, boolean | string | null> | null;
+  externalId: string | null;
   status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
   createdAt: string;
   appointments: Array<{
@@ -536,6 +553,14 @@ export default function PatientDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Alerts, tags, contacts, consents */}
+          <PatientProfilePanel
+            key={patient.id}
+            patient={patient as unknown as ProfileFields}
+            canEdit
+            onSaved={(d) => setPatient((prev) => (prev ? { ...prev, ...(d as Partial<Patient>) } : prev))}
+          />
 
           {/* Tabs */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 rounded-xl shadow-sm overflow-hidden">

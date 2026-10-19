@@ -384,6 +384,23 @@ model Patient {
   clientSource String? @map("client_source")
   // Appointment confirmations/reminders by SMS (transactional; marketing consent is separate)
   smsRemindersEnabled Boolean @default(true) @map("sms_reminders_enabled")
+  emailRemindersEnabled Boolean @default(true) @map("email_reminders_enabled")
+
+  // Zappy record fields (docs/agenda: "Zappy client export → CRM")
+  phoneNote    String?  @map("phone_note")
+  phone2       String?  @map("phone2")
+  phone2Note   String?  @map("phone2_note")
+  // Birthday when the year is unknown (dateOfBirth needs all three parts)
+  birthDay     Int?     @map("birth_day")
+  birthMonth   Int?     @map("birth_month")
+  invoiceName  String?  @map("invoice_name")
+  invoiceNotes String?  @map("invoice_notes")
+  referredBy   String?  @map("referred_by")
+  // Free labels (Zappy "segmentos"); clinical alerts are derived from them (lib/patients/alerts.ts)
+  tags         String[] @default([])
+  // GDPR consents: { appointments, campaigns, customerRecords, remindersEmail, remindersSms,
+  // sharePhotos, sharePhotosNoFace, survey: boolean | null, updatedAt: ISO | null }
+  consents     Json?
 
   // Status & tracking
   status       PatientStatus @default(ACTIVE)
@@ -415,6 +432,8 @@ model Patient {
   @@index([phone])
   @@index([parentPhone2])
   @@index([lastName, firstName])
+  @@index([lastVisitAt])
+  @@index([tags], type: Gin)
   @@map("patients")
 }
 

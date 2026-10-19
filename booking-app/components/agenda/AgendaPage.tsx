@@ -16,7 +16,13 @@ import { BookingDialog } from "./BookingDialog"
 import { AppointmentDrawer } from "./AppointmentDrawer"
 import { BlockDialog, type BlockDraft } from "./BlockDialog"
 import { SidePanel } from "./SidePanel"
-import { CALENDAR_VIEW, blockHtml, buildEvents, buildResources, closedWeekdays, eventHtml, rangeFor, timeBounds, type ColorBy } from "./calendarModel"
+import { AgendaSearch } from "./AgendaSearch"
+import { AgendaFilters } from "./AgendaFilters"
+import { MiniCalendar } from "./MiniCalendar"
+import {
+  CALENDAR_VIEW, EMPTY_FILTER, blockHtml, buildEvents, buildResources, closedWeekdays, eventHtml, eventTooltip, matchesFilter, rangeFor,
+  rangeStats, timeBounds, type ColorBy, type EventFilter,
+} from "./calendarModel"
 import type { AgendaAppointment, AgendaBlock, AgendaPayload, AgendaView, BookingDraft, Issue } from "./types"
 import { ISSUE_LABEL } from "./strings"
 import { addDays, addMonths, fmt, fmtDayLong, fmtDayShort, fromCalendarDate, minutesBetween } from "./wall"
@@ -78,6 +84,9 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
   const [colorBy, setColorByState] = useState<ColorBy>(() => readPref("agenda.colorBy", ["type", "provider"] as const, "type"))
   const [showWeekends, setShowWeekends] = useState(() => readPref("agenda.weekends", ["1", "0"] as const, "0") === "1")
   const [showCancelled, setShowCancelled] = useState(false)
+  const [eventFilter, setEventFilter] = useState<EventFilter>(EMPTY_FILTER)
+  // Cancelled / no-show appointments are only fetched when someone wants to see them.
+  const includeInactive = showCancelled || eventFilter.statuses.some((st) => st === "CANCELLED" || st === "NO_SHOW")
   const [filter, setFilter] = useState<string[] | null>(myProviderId ? [myProviderId] : null)
   const [data, setData] = useState<AgendaPayload | null>(null)
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
@@ -102,12 +111,12 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
   }
 
   const range = useMemo(() => rangeFor(view, date), [view, date])
-  const requestKey = `${range.from}|${range.to}|${showCancelled ? 1 : 0}`
+  const requestKey = `${range.from}|${range.to}|${includeInactive ? 1 : 0}`
   const loading = loadedKey !== requestKey
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/agenda?from=${range.from}&to=${range.to}${showCancelled ? "&includeCancelled=1" : ""}`)
+      const res = await fetch(`/api/agenda?from=${range.from}&to=${range.to}${includeInactive ? "&includeCancelled=1" : ""}`)
       const d = await res.json()
       if (!res.ok) throw new Error(d.error ?? "Failed to load the agenda")
       setData(d)
@@ -116,14 +125,14 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
     } catch (e) {
       setError((e as Error).message)
     } finally {
-      setLoadedKey(`${range.from}|${range.to}|${showCancelled ? 1 : 0}`)
+      setLoadedKey(`${range.from}|${range.to}|${includeInactive ? 1 : 0}`)
     }
-  }, [range.from, range.to, showCancelled])
+  }, [range.from, range.to, includeInactive])
 
   useEffect(() => {
     const ctrl = new AbortController()
-    const key = `${range.from}|${range.to}|${showCancelled ? 1 : 0}`
-    fetch(`/api/agenda?from=${range.from}&to=${range.to}${showCancelled ? "&includeCancelled=1" : ""}`, { signal: ctrl.signal })
+    const key = `${range.from}|${range.to}|${includeInactive ? 1 : 0}`
+    fetch(`/api/agenda?from=${range.from}&to=${range.to}${includeInactive ? "&includeCancelled=1" : ""}`, { signal: ctrl.signal })
       .then(async (res) => {
         const d = await res.json()
         if (!res.ok) throw new Error(d.error ?? "Failed to load the agenda")
@@ -138,7 +147,7 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
         setLoadedKey(key)
       })
     return () => ctrl.abort()
-  }, [range.from, range.to, showCancelled])
+  }, [range.from, range.to, includeInactive])
 
   const refresh = useCallback((message?: string) => {
     if (message) showToast(message, "success")
@@ -312,7 +321,7 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
       selectMinDistance: 8,
       eventLongPressDelay: 400,
       resources: buildResources(data, filter),
-      events: buildEvents(data, { view, colorBy, filter, editable: canWrite }),
+      events: buildEvents(data, { view, colorBy, filter, editable: canWrite, eventFilter }),
       eventContent: (info: Calendar.EventContentInfo) => {
         const p = info.event.extendedProps as { kind?: string; appt?: AgendaAppointment; block?: AgendaBlock }
         if (p.kind === "appointment" && p.appt) return { html: eventHtml(p.appt, data, view === "month" || info.view.type.startsWith("list")) }
@@ -326,11 +335,15 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
       dateClick: onDateClick,
       select: onSelect,
       eventClick: onEventClick,
+      eventDidMount: (info: Calendar.EventDidMountInfo) => {
+        const p = info.event.extendedProps as { kind?: string; appt?: AgendaAppointment }
+        if (p.kind === "appointment" && p.appt) info.el.title = eventTooltip(p.appt, data)
+      },
       eventDrop: onEventDrop,
       eventResize: onEventResize,
       noEventsContent: "No appointments",
     }
-  }, [data, view, date, filter, colorBy, showWeekends, canWrite, onDateClick, onSelect, onEventClick, onEventDrop, onEventResize])
+  }, [data, view, date, filter, colorBy, showWeekends, canWrite, eventFilter, onDateClick, onSelect, onEventClick, onEventDrop, onEventResize])
 
   const title = view === "day"
     ? fmtDayLong(date)
@@ -339,6 +352,9 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
       : `${fmt(range.from, { day: "numeric", month: "short" })} – ${fmt(range.to, { day: "numeric", month: "short", year: "numeric" })}`
 
   const providers = data?.providers.filter((p) => p.active) ?? []
+  const visibleAppts = (data?.appointments ?? []).filter((a) => (!filter || !a.providerId || filter.includes(a.providerId)) && matchesFilter(a, eventFilter))
+  const stats = rangeStats(visibleAppts)
+  const typeLabel = (t: string) => data?.appointmentTypes.find((x) => x.type === t)?.label ?? t
   const closuresInView = data?.closures.filter((c) => c.date >= range.from && c.date <= range.to) ?? []
   const toggleProvider = (id: string) => {
     setFilter((f) => {
@@ -366,6 +382,16 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
         {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          <AgendaSearch
+            today={today}
+            typeLabel={typeLabel}
+            onJump={(a) => {
+              setDate(a.start.slice(0, 10))
+              if (view === "month") setView("day")
+              setDrawerId(a.id)
+            }}
+            onBookFor={(p) => setBookingFor(p)}
+          />
           <div role="tablist" aria-label="View" className="flex rounded-lg border border-border p-0.5">
             {VIEWS.map((v) => (
               <button
@@ -406,6 +432,7 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
               </button>
             )
           })}
+          <AgendaFilters value={eventFilter} onChange={setEventFilter} types={data.appointmentTypes} />
           <span className="text-muted-foreground">Colour by</span>
           <select value={colorBy} onChange={(e) => setColorBy(e.target.value as ColorBy)} className="h-7 rounded-md border border-input bg-background px-1.5 dark:bg-input/30" aria-label="Colour by">
             <option value="type">appointment type</option>
@@ -414,6 +441,12 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
           <label className="flex items-center gap-1.5">
             <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} /> Show cancelled
           </label>
+          <span className="ml-auto tabular-nums text-muted-foreground" aria-live="polite">
+            {stats.total} appointment{stats.total === 1 ? "" : "s"} · {stats.confirmed} confirmed
+            {stats.toConfirm > 0 && <span className="text-amber-600"> · {stats.toConfirm} to confirm</span>}
+            {stats.arrived > 0 && <> · {stats.arrived} arrived</>}
+            {stats.byAgent > 0 && <> · {stats.byAgent} by Acácia</>}
+          </span>
           {view !== "day" && (
             <label className="flex items-center gap-1.5">
               <input type="checkbox" checked={showWeekends} onChange={(e) => { setShowWeekends(e.target.checked); writePref("agenda.weekends", e.target.checked ? "1" : "0") }} /> Closed days
@@ -440,7 +473,20 @@ export function AgendaPage({ today, canWrite, canDoubleBook, myProviderId, initi
           {data ? <EventCalendar options={calendarOptions} /> : <div className="flex h-96 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}
         </div>
         {data && (
-          <div className="agenda-noprint">
+          <div className="agenda-noprint grid content-start gap-4">
+            <MiniCalendar
+              selected={date}
+              today={today}
+              rangeFrom={range.from}
+              rangeTo={range.to}
+              closedWeekdays={closedWeekdays(data)}
+              closures={data.closures}
+              version={version}
+              onPick={(d) => {
+                setDate(d)
+                if (view === "month") setView("day")
+              }}
+            />
             <SidePanel
               payload={data}
               version={version}

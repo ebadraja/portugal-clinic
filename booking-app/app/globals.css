@@ -30,6 +30,19 @@
   --color-input:                var(--input);
   --color-ring:                 var(--ring);
 
+  /* Remap Tailwind blue-* → dental teal (matches clinicadentariaih.com) */
+  --color-blue-50:  #e8f2f3;
+  --color-blue-100: #d4e8ea;
+  --color-blue-200: #a8d0d4;
+  --color-blue-300: #6fb0b6;
+  --color-blue-400: #3d8f97;
+  --color-blue-500: #1a737b;
+  --color-blue-600: #0e5c63;
+  --color-blue-700: #0b4d53;
+  --color-blue-800: #083e43;
+  --color-blue-900: #062e32;
+  --color-blue-950: #041f22;
+
   /* Radius (used by button size variants) */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -40,73 +53,71 @@
   --font-heading: var(--font-sans);
 }
 
-/* ─── Light mode tokens ──────────────────────────────────────────────────── */
+/* ─── Light mode tokens (dental website palette) ─────────────────────────── */
 :root {
-  /* Primitive tokens consumed by @theme inline above */
-  --background:           #ffffff;
-  --foreground:           #0f172a;   /* slate-900 */
+  /* Dental brand: primary #0e5c63, dark #083e43, soft #e8f2f3, gold #c9a227 */
+  --background:           #f7f9f9;
+  --foreground:           #1a2426;
   --card:                 #ffffff;
-  --card-foreground:      #0f172a;
+  --card-foreground:      #1a2426;
   --popover:              #ffffff;
-  --popover-foreground:   #0f172a;
-  --primary:              #1e293b;   /* slate-800 */
-  --primary-foreground:   #f8fafc;   /* slate-50  */
-  --secondary:            #f1f5f9;   /* slate-100 */
-  --secondary-foreground: #1e293b;
-  --muted:                #f1f5f9;   /* slate-100 */
-  --muted-foreground:     #64748b;   /* slate-500 */
-  --accent:               #f1f5f9;
-  --accent-foreground:    #1e293b;
-  --destructive:          #ef4444;   /* red-500   */
-  --border:               #e2e8f0;   /* slate-200 */
-  --input:                #e2e8f0;
-  --ring:                 #94a3b8;   /* slate-400 */
+  --popover-foreground:   #1a2426;
+  --primary:              #0e5c63;
+  --primary-foreground:   #ffffff;
+  --secondary:            #e8f2f3;
+  --secondary-foreground: #083e43;
+  --muted:                #e8f2f3;
+  --muted-foreground:     #5c6b6d;
+  --accent:               #c9a227;
+  --accent-foreground:    #1a2426;
+  --destructive:          #b3453b;
+  --border:               #d8e2e3;
+  --input:                #d8e2e3;
+  --ring:                 #0e5c63;
   --radius:               0.5rem;
 
-  /* App semantic tokens (kept for base-layer styles) */
-  --color-bg:        #f8fafc;
+  /* App semantic tokens */
+  --color-bg:        #f7f9f9;
   --color-surface:   #ffffff;
-  --color-surface-2: #f1f5f9;
-  --color-surface-3: #e2e8f0;
-  --color-text-1:    #0f172a;
-  --color-text-2:    #475569;
-  --color-text-3:    #94a3b8;
-  --color-border-2:  #f1f5f9;
+  --color-surface-2: #e8f2f3;
+  --color-surface-3: #d8e2e3;
+  --color-text-1:    #1a2426;
+  --color-text-2:    #5c6b6d;
+  --color-text-3:    #8a9a9c;
+  --color-border-2:  #e8f2f3;
 
   color-scheme: light;
 }
 
 /* ─── Dark mode tokens ───────────────────────────────────────────────────── */
 :root.dark {
-  /* Primitive tokens */
-  --background:           #0f172a;                /* slate-900 */
-  --foreground:           #f8fafc;                /* slate-50  */
-  --card:                 #1e293b;                /* slate-800 */
-  --card-foreground:      #f8fafc;
-  --popover:              #1e293b;                /* slate-800 */
-  --popover-foreground:   #f8fafc;
-  --primary:              #f8fafc;                /* slate-50  */
-  --primary-foreground:   #1e293b;                /* slate-800 */
-  --secondary:            #334155;                /* slate-700 */
-  --secondary-foreground: #f8fafc;
-  --muted:                #334155;                /* slate-700 */
-  --muted-foreground:     #94a3b8;                /* slate-400 */
-  --accent:               #334155;
-  --accent-foreground:    #f8fafc;
-  --destructive:          #f87171;                /* red-400   */
-  --border:               rgba(255, 255, 255, 0.1);
-  --input:                rgba(255, 255, 255, 0.15);
-  --ring:                 #64748b;                /* slate-500 */
+  --background:           #041f22;
+  --foreground:           #e8f2f3;
+  --card:                 #083e43;
+  --card-foreground:      #e8f2f3;
+  --popover:              #083e43;
+  --popover-foreground:   #e8f2f3;
+  --primary:              #3d8f97;
+  --primary-foreground:   #041f22;
+  --secondary:            #0b4d53;
+  --secondary-foreground: #e8f2f3;
+  --muted:                #0b4d53;
+  --muted-foreground:     #a8d0d4;
+  --accent:               #c9a227;
+  --accent-foreground:    #041f22;
+  --destructive:          #e07a72;
+  --border:               rgba(232, 242, 243, 0.12);
+  --input:                rgba(232, 242, 243, 0.18);
+  --ring:                 #3d8f97;
 
-  /* App semantic tokens */
-  --color-bg:        #020617;
-  --color-surface:   #0f172a;
-  --color-surface-2: #1e293b;
-  --color-surface-3: #334155;
-  --color-text-1:    #f8fafc;
-  --color-text-2:    #94a3b8;
-  --color-text-3:    #64748b;
-  --color-border-2:  #1e293b;
+  --color-bg:        #041f22;
+  --color-surface:   #062e32;
+  --color-surface-2: #083e43;
+  --color-surface-3: #0b4d53;
+  --color-text-1:    #e8f2f3;
+  --color-text-2:    #a8d0d4;
+  --color-text-3:    #6fb0b6;
+  --color-border-2:  #083e43;
 
   color-scheme: dark;
 }

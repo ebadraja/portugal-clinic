@@ -7,6 +7,7 @@ import { computeMessagingKpis } from "@/lib/messaging/timeline"
 export async function GET() {
   try {
     const session = await auth()
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     // Today's date range (midnight to midnight)
     const now = new Date()

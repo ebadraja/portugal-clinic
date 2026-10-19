@@ -1,0 +1,114 @@
+/* Agenda theme on top of @event-calendar/core — light and dark follow the app's `.dark` class. */
+
+.agenda-cal .ec {
+  --ec-bg-color: transparent;
+  --ec-border-color: #e2e8f0;
+  --ec-color-300: #e2e8f0;
+  --ec-color-200: #f1f5f9;
+  --ec-color-100: #f8fafc;
+  --ec-today-bg-color: #f0f9fa;
+  --ec-highlight-color: #e8f2f3;
+  --ec-now-indicator-color: #dc2626;
+  --ec-popup-bg-color: #ffffff;
+  --agenda-card: #ffffff;
+  --agenda-ink: #0f172a;
+  --agenda-muted: #64748b;
+  --agenda-off: #f1f5f9;
+  font-size: 12px;
+  color: #334155;
+}
+
+.dark .agenda-cal .ec {
+  color-scheme: dark;
+  --ec-border-color: #1e293b;
+  --ec-color-400: #475569;
+  --ec-color-300: #1e293b;
+  --ec-color-200: #0f172a;
+  --ec-color-100: #0b1220;
+  --ec-color-50: #0b1220;
+  --ec-today-bg-color: #0b2a2d;
+  --ec-highlight-color: #0b2a2d;
+  --ec-popup-bg-color: #0f172a;
+  --agenda-card: #0f172a;
+  --agenda-ink: #f1f5f9;
+  --agenda-muted: #94a3b8;
+  --agenda-off: #111827;
+  color: #cbd5e1;
+}
+
+.agenda-cal .ec-header .ec-day,
+.agenda-cal .ec-col-head {
+  font-weight: 600;
+  color: var(--agenda-ink);
+}
+
+/* Appointment cards: tint + strong left edge in the type/dentist colour */
+.agenda-cal .ec-event.agenda-ev {
+  background: color-mix(in srgb, var(--agenda-accent, #64748b) 14%, var(--agenda-card));
+  color: var(--agenda-ink);
+  border-left: 3px solid var(--agenda-accent, #64748b);
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--agenda-accent, #64748b) 22%, transparent);
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.agenda-cal .ec-event.agenda-ev:hover {
+  background: color-mix(in srgb, var(--agenda-accent, #64748b) 22%, var(--agenda-card));
+}
+.agenda-cal .agenda-ev--confirmed { box-shadow: 0 0 0 1px color-mix(in srgb, var(--agenda-accent) 45%, transparent); }
+.agenda-cal .agenda-ev--arrived { outline: 2px solid #10b981; outline-offset: -2px; }
+.agenda-cal .agenda-ev--completed { opacity: 0.6; }
+.agenda-cal .agenda-ev--cancelled { opacity: 0.45; text-decoration: line-through; }
+.agenda-cal .agenda-ev--no_show {
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, #ef4444 14%, var(--agenda-card)) 0 6px, var(--agenda-card) 6px 12px);
+  border-left-color: #ef4444;
+}
+
+.agenda-ev__row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.agenda-ev__time { font-variant-numeric: tabular-nums; color: var(--agenda-muted); font-size: 11px; white-space: nowrap; }
+.agenda-ev__chips { display: inline-flex; gap: 2px; margin-left: auto; align-items: center; }
+.agenda-ev__name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.25; }
+.agenda-ev__meta { color: var(--agenda-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.agenda-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 14px; height: 14px; padding: 0 3px; border-radius: 4px;
+  font-size: 9px; font-weight: 700; line-height: 1;
+  background: color-mix(in srgb, var(--agenda-ink) 10%, transparent); color: var(--agenda-ink);
+}
+.agenda-chip--ok { background: #10b981; color: #fff; }
+.agenda-chip--in { background: #0e5c63; color: #fff; }
+.agenda-chip--ai { background: #6366f1; color: #fff; }
+.agenda-chip--warn { background: #f59e0b; color: #1f2937; }
+.agenda-chip--new { background: #0ea5e9; color: #fff; }
+
+.agenda-dot { width: 7px; height: 7px; border-radius: 9999px; display: inline-block; background: #94a3b8; }
+.agenda-dot--pending { background: transparent; box-shadow: inset 0 0 0 1.5px #94a3b8; }
+.agenda-dot--sent { background: #3b82f6; }
+.agenda-dot--delivered { background: #10b981; }
+.agenda-dot--failed { background: #ef4444; }
+
+/* Blocked time: hatched, not draggable */
+.agenda-cal .ec-event.agenda-block {
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--agenda-muted) 18%, transparent) 0 5px, transparent 5px 10px);
+  color: var(--agenda-muted);
+  border: 1px dashed color-mix(in srgb, var(--agenda-muted) 50%, transparent);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* Time nobody can be booked (closed, lunch, outside the dentist's hours) */
+.agenda-cal .ec-bg-event.agenda-off,
+.agenda-cal .ec-event.agenda-off {
+  background: var(--agenda-off);
+  opacity: 1;
+}
+
+/* List view rows use the same chips */
+.agenda-cal .ec-list .ec-event.agenda-ev { border-left-width: 3px; }
+
+@media print {
+  .agenda-noprint, aside, header, nav { display: none !important; }
+  .agenda-cal { border: none !important; }
+  main { margin: 0 !important; padding: 0 !important; }
+}

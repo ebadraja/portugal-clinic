@@ -60,7 +60,7 @@ interface Patient {
   id: string;
   firstName: string;
   lastName: string;
-  dateOfBirth: string;
+  dateOfBirth: string | null;
   phone: string | null;
   parentName: string | null;
   status: "ACTIVE" | "INACTIVE" | "ARCHIVED" | "DRAFT";
@@ -691,8 +691,14 @@ export default function PatientsPage() {
 
                           {/* DOB + age */}
                           <TableCell className="text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                            {format(new Date(patient.dateOfBirth), "MMM d, yyyy")}
-                            <span className="text-slate-500 dark:text-slate-400"> ({calculateAge(patient.dateOfBirth)} yrs)</span>
+                            {patient.dateOfBirth ? (
+                              <>
+                                {format(new Date(patient.dateOfBirth), "MMM d, yyyy")}
+                                <span className="text-slate-500 dark:text-slate-400"> ({calculateAge(patient.dateOfBirth)} yrs)</span>
+                              </>
+                            ) : (
+                              <span className="text-amber-600 dark:text-amber-400">Missing</span>
+                            )}
                           </TableCell>
 
                           {/* Phone */}

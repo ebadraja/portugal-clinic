@@ -23,8 +23,9 @@ export function phonesMatch(a: string, b: string): boolean {
   const nb = normalizePhone(b)
   if (!na || !nb) return false
   if (na === nb) return true
-  // Match last 10 digits (US)
-  return na.slice(-10) === nb.slice(-10)
+  // Match the national significant number: last 9 digits (Portugal: "+351 912…" vs "912…").
+  if (na.length < 9 || nb.length < 9) return false
+  return na.slice(-9) === nb.slice(-9)
 }
 
 export function generateRawToken(): string {
@@ -51,7 +52,7 @@ export function isSameDateOfBirth(dob: Date, input: string): boolean {
 
 export async function findPatientByPhone(phone: string) {
   const digits = normalizePhone(phone)
-  if (digits.length < 10) return null
+  if (digits.length < 9) return null
 
   const patients = await prisma.patient.findMany({
     where: { phone: { not: null } },

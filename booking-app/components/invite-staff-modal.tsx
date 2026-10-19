@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { OneTimeLink } from "@/components/auth/one-time-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -91,6 +92,7 @@ export default function InviteStaffModal({
   const [submitted, setSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [inviteResult, setInviteResult] = useState<{ emailSent: boolean; inviteUrl?: string; expiresAt?: string } | null>(null);
 
   const validateField = (fieldName: string, value: string): string | null => {
     switch (fieldName) {
@@ -202,10 +204,12 @@ export default function InviteStaffModal({
         return;
       }
 
+      setInviteResult({ emailSent: !!data.emailSent, inviteUrl: data.inviteUrl, expiresAt: data.expiresAt });
       setSubmitted(true);
       if (onStaffInvited) onStaffInvited();
 
-      setTimeout(() => handleReset(), 2500);
+      // Keep the dialog open when there is a one-time link to copy.
+      if (data.emailSent) setTimeout(() => handleReset(), 2500);
     } catch {
       setServerError('Network error. Please try again.');
     } finally {
@@ -218,6 +222,7 @@ export default function InviteStaffModal({
     setErrors({});
     setSubmitted(false);
     setServerError(null);
+    setInviteResult(null);
     onOpenChange(false);
   };
 
@@ -226,7 +231,7 @@ export default function InviteStaffModal({
       <Dialog open={open} onOpenChange={handleReset}>
         <DialogContent className="w-full max-w-md">
           <DialogHeader>
-            <DialogTitle>Invitation Sent</DialogTitle>
+            <DialogTitle>{inviteResult?.emailSent ? 'Invitation Sent' : 'Account Created'}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
@@ -237,7 +242,9 @@ export default function InviteStaffModal({
                   {formData.firstName} {formData.lastName}
                 </h3>
                 <p className="text-sm text-emerald-700 mt-1">
-                  invitation sent to {formData.email}
+                  {inviteResult?.emailSent
+                    ? `set-password link emailed to ${formData.email}`
+                    : `account created for ${formData.email}`}
                 </p>
               </div>
             </div>
@@ -260,6 +267,8 @@ export default function InviteStaffModal({
                 </span>
               </div>
             </div>
+
+            {inviteResult?.inviteUrl && <OneTimeLink url={inviteResult.inviteUrl} expiresAt={inviteResult.expiresAt} />}
 
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
               <p className="text-sm text-amber-800">
@@ -503,7 +512,7 @@ export default function InviteStaffModal({
             <div className="text-sm text-amber-800">
               <p className="font-medium mb-1">Pending Approval Required</p>
               <p>
-                The account will be created with <strong>PENDING</strong> status. An admin must approve it before the staff member can log in. Default password: <code className="bg-amber-100 px-1 rounded font-mono">Kid0-18CRM</code>
+                The account will be created with <strong>PENDING</strong> status. An admin must approve it before the staff member can log in. They choose their own password through a one-time link (valid 72 hours).
               </p>
             </div>
           </div>

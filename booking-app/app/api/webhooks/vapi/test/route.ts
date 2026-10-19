@@ -7,50 +7,48 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
-import { processVapiEndOfCall } from "@/app/api/webhooks/vapi/route"
+import { processVapiEndOfCall } from "@/lib/voice/endOfCall"
 import { randomUUID } from "crypto"
 
 // Canned scenarios — one is chosen at random each call so you can run the test
 // multiple times without hitting the sessionId uniqueness constraint.
 const SCENARIOS = [
   {
-    label: "Appointment booking",
+    label: "Pergunta sobre seguros",
     call: {
       id:         "",           // filled in at runtime
       type:       "webCall" as const,
-      customer:   { name: "Sarah Johnson", email: "sarah.j@example.com" },
+      customer:   { name: "Marta Ferreira", email: "marta.ferreira@example.com" },
       startedAt:  "",           // filled in at runtime
       endedAt:    "",
     },
-    transcript: `Assistant: Hello! Welcome to Kids First Pediatrics. How can I help you today?
-User: Hi, I'd like to schedule a well-child visit for my 4-year-old daughter.
-Assistant: Of course! We have openings next Tuesday at 9 AM or 2 PM. Which works better?
-User: 9 AM works great.
-Assistant: Perfect — I've booked a well-child visit for Tuesday at 9 AM. You'll get a confirmation email shortly.
-User: Thank you! Goodbye.
-Assistant: Goodbye! We look forward to seeing you.`,
-    summary:    "Parent scheduled a well-child visit for her 4-year-old daughter. Appointment confirmed for next Tuesday at 9 AM.",
+    transcript: `Assistant: Clínica Dentária Nunes Monteiro, fala a Acácia, assistente virtual. Em que posso ajudar?
+User: Boa tarde. Queria saber se trabalham com a AdvanceCare.
+Assistant: Sim, trabalhamos com a AdvanceCare. A cobertura de cada tratamento é confirmada pela receção.
+User: Obrigada, era só isso.
+Assistant: De nada. Bom dia!`,
+    summary:    "A pessoa perguntou se a clínica trabalha com a AdvanceCare. Foi confirmado. Nenhuma consulta marcada.",
     endedReason: "customer-ended-call",
   },
   {
-    label: "Insurance inquiry",
+    label: "Novo paciente — pedido de chamada",
     call: {
       id:         "",
       type:       "webCall" as const,
-      customer:   { name: "Marcus Rivera" },
+      customer:   { name: "Rui Costa" },
       startedAt:  "",
       endedAt:    "",
     },
-    transcript: `Assistant: Hello! How can I help you today?
-User: I wanted to know if you accept Medicaid for pediatric visits.
-Assistant: Yes, we accept Medicaid, CHIP, and most major insurance plans. Would you like to verify your specific plan?
-User: No, that's enough information. Thank you.
-Assistant: You're welcome! Feel free to call us if you need anything else.`,
-    summary:    "Caller asked whether the practice accepts Medicaid. Confirmed yes. No appointment booked.",
+    transcript: `Assistant: Clínica Dentária Nunes Monteiro, fala a Acácia, assistente virtual. Em que posso ajudar?
+User: Olá, nunca fui aí e gostava de marcar uma consulta de avaliação.
+Assistant: Para novos pacientes, a equipa confirma a disponibilidade e liga de volta. Posso registar o pedido?
+User: Sim, por favor.
+Assistant: Pedido registado. A receção vai ligar-lhe assim que possível.`,
+    summary:    "Novo paciente pediu consulta de avaliação. Foi registado um pedido de chamada de volta.",
     endedReason: "customer-ended-call",
   },
   {
-    label: "After-hours abandoned",
+    label: "Chamada sem resposta",
     call: {
       id:         "",
       type:       "webCall" as const,
@@ -58,7 +56,7 @@ Assistant: You're welcome! Feel free to call us if you need anything else.`,
       startedAt:  "",
       endedAt:    "",
     },
-    transcript: `Assistant: Hello! Welcome to Kids First Pediatrics.`,
+    transcript: `Assistant: Clínica Dentária Nunes Monteiro, fala a Acácia, assistente virtual.`,
     summary:    "",
     endedReason: "silence-timed-out",
   },

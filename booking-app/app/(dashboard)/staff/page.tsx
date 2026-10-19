@@ -24,6 +24,7 @@ import {
   DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import InviteStaffModal from '@/components/invite-staff-modal';
+import { OneTimeLink } from '@/components/auth/one-time-link';
 import {
   Users,
   UserPlus,
@@ -132,6 +133,7 @@ export default function StaffManagementPage() {
 
   // Toast-style feedback
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [resetLink, setResetLink] = useState<{ name: string; url: string; expiresAt?: string } | null>(null);
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
@@ -261,24 +263,34 @@ export default function StaffManagementPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'reset_password' }),
     });
-    if (res.ok) showToast(`Password reset to default for ${u.firstName} ${u.lastName}.`);
-    else showToast('Failed to reset password.', 'error');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast('Failed to create a reset link.', 'error');
+    } else if (data.resetUrl) {
+      setResetLink({ name: `${u.firstName} ${u.lastName}`, url: data.resetUrl, expiresAt: data.expiresAt });
+    } else {
+      showToast(`Reset link emailed to ${u.firstName} ${u.lastName}.`);
+    }
   };
 
   const handleDelete = async () => {
     if (!deleteUser) return;
+    if (deleteConfirmText.trim() !== deleteUser.email) return;
     setDeleteLoading(true);
     try {
       const res = await fetch(`/api/staff/${deleteUser.id}`, { method: 'DELETE' });
       if (res.ok) {
+        const name = `${deleteUser.firstName} ${deleteUser.lastName}`;
         setDeleteUser(null);
         setDeleteConfirmText('');
         await fetchStaff();
-        showToast(`${deleteUser.firstName} ${deleteUser.lastName} removed from team.`);
+        showToast(`${name} removed from team.`);
       } else {
-        const data = await res.json();
-        showToast(data.error || 'Failed to remove.', 'error');
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || 'Failed to remove staff member.', 'error');
       }
+    } catch {
+      showToast('Failed to remove staff member.', 'error');
     } finally {
       setDeleteLoading(false);
     }
@@ -885,7 +897,8 @@ export default function StaffManagementPage() {
               </Button>
               <Button
                 variant="destructive"
-                disabled={deleteConfirmText !== deleteUser?.email || deleteLoading}
+                type="button"
+                disabled={deleteConfirmText.trim() !== deleteUser?.email || deleteLoading}
                 onClick={handleDelete}
                 className="gap-2"
               >
@@ -894,6 +907,17 @@ export default function StaffManagementPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* One-time reset link (shown when email isn't configured) */}
+      <Dialog open={!!resetLink} onOpenChange={(open) => { if (!open) setResetLink(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Password reset link for {resetLink?.name}</DialogTitle>
+          </DialogHeader>
+          {resetLink && <OneTimeLink url={resetLink.url} expiresAt={resetLink.expiresAt} />}
+          <p className="text-xs text-slate-500">Their current password keeps working until they use the link.</p>
         </DialogContent>
       </Dialog>
 

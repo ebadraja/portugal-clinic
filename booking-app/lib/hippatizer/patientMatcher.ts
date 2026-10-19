@@ -10,7 +10,7 @@ export interface PatientMatch {
   patientId: string;
   firstName: string;
   lastName: string;
-  dateOfBirth: Date;
+  dateOfBirth: Date | null;
   email?: string;
   phone?: string;
   confidence: number;
@@ -119,7 +119,7 @@ export async function findPatientMatches(
       let confidence = 0;
 
       // DOB exact match — UTC comparison to avoid timezone off-by-one
-      if (dateOfBirth && !isNaN(dateOfBirth.getTime())) {
+      if (dateOfBirth && !isNaN(dateOfBirth.getTime()) && patient.dateOfBirth) {
         const dobMatch = isSameDateOfBirth(dateOfBirth, patient.dateOfBirth);
         if (dobMatch) {
           confidence += 0.4;

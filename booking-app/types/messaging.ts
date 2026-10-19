@@ -48,7 +48,7 @@ export interface MessagingPatient {
   phone: string | null
   email: string | null
   parentName: string | null
-  dateOfBirth: string
+  dateOfBirth: string | null
 }
 
 export interface MessagingStaffRef {
@@ -100,7 +100,7 @@ export interface PatientContextData {
   id: string
   firstName: string
   lastName: string
-  dateOfBirth: string
+  dateOfBirth: string | null
   phone: string | null
   email: string | null
   parentName: string | null

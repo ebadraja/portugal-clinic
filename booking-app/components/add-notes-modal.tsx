@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import {
   Dialog,
   DialogContent,
@@ -59,6 +60,8 @@ export default function AddNotesModal({
   patientName = "",
   onNoteSaved,
 }: AddNotesModalProps) {
+  const { data: session } = useSession();
+  const authorName = `${session?.user?.firstName ?? ""} ${session?.user?.lastName ?? ""}`.trim() || "You";
   const [formData, setFormData] = useState<NoteData>({
     ...INITIAL_NOTE,
     patientName,
@@ -144,7 +147,7 @@ export default function AddNotesModal({
       onNoteSaved({
         ...formData,
         createdAt: new Date().toISOString(),
-        createdBy: "Dr. Tamas",
+        createdBy: authorName,
       });
     }
 
@@ -306,7 +309,7 @@ export default function AddNotesModal({
             </div>
             <div className="flex justify-between">
               <span className="text-slate-600">Created By:</span>
-              <span className="font-medium text-slate-900">Dr. Tamas</span>
+              <span className="font-medium text-slate-900">{authorName}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-600">Timestamp:</span>

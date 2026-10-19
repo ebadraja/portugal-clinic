@@ -29,6 +29,8 @@ import {
   emailOffsetToTriggerKey,
   wasSmsSentForTriggerKey,
 } from '@/lib/messaging/automationCoordination'
+import { buildClinicSettings, getClinicSettings, type ClinicSettings } from '@/lib/clinic/settings'
+import { formatDateLong, formatTime } from '@/lib/clinic/time'
 
 // How often the scheduler runs (must match CRON_SCHEDULE window)
 const CRON_SCHEDULE   = '*/15 * * * *'   // every 15 minutes
@@ -40,7 +42,7 @@ const WINDOW_MINUTES  = 15               // match window ± half this value
  * Build merge-tag variables for a patient + appointment.
  * Keys must match the {{variable}} names in your templates.
  */
-function buildVariables(
+export function buildVariables(
   patient:     { firstName: string; lastName: string; parentName: string | null },
   appointment: {
     startTime:   Date
@@ -48,18 +50,12 @@ function buildVariables(
     provider:    string | null
     reason:      string | null
   },
+  clinic: ClinicSettings,
 ): Record<string, string> {
-  const apptDate = appointment.startTime.toLocaleDateString('en-US', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-  })
-  const apptTime = appointment.startTime.toLocaleTimeString('en-US', {
-    hour: '2-digit', minute: '2-digit',
-  })
-
-  const visitType = appointment.type
-    .replace(/_/g, ' ')
-    .toLowerCase()
-    .replace(/\b\w/g, c => c.toUpperCase())
+  // Clinic wall time and locale — never the server's (Vercel runs in UTC).
+  const apptDate = formatDateLong(appointment.startTime, clinic.timezone, clinic.locale)
+  const apptTime = formatTime(appointment.startTime, clinic.timezone, clinic.locale)
+  const visitType = clinic.appointmentTypes.find((t) => t.type === appointment.type)?.label ?? 'Consulta'
 
   return {
     patient_name:       `${patient.firstName} ${patient.lastName}`,
@@ -68,11 +64,11 @@ function buildVariables(
     appointment_date:   apptDate,
     appointment_time:   apptTime,
     appointment_type:   visitType,
-    provider_name:      appointment.provider ?? 'Dr. Tamas',
+    provider_name:      appointment.provider ?? clinic.providers.find((p) => p.active)?.name ?? '',
     reason:             appointment.reason ?? '',
-    practice_name:      'Clínica Dentária Nunes Monteiro',
-    practice_phone:     '(555) 123-4567',
-    practice_address:   '123 Medical Plaza Drive, Suite 100',
+    practice_name:      clinic.practice.name,
+    practice_phone:     clinic.practice.phone,
+    practice_address:   clinic.practice.address,
   }
 }
 
@@ -80,7 +76,7 @@ function buildVariables(
 
 function matchesConditions(
   appointment: { type: string; provider: string | null },
-  patient:     { dateOfBirth: Date },
+  patient:     { dateOfBirth: Date | null },
   conditions:  Record<string, unknown> | null,
 ): boolean {
   if (!conditions) return true
@@ -88,6 +84,8 @@ function matchesConditions(
   if (conditions.visitType && appointment.type !== conditions.visitType) return false
 
   if (Array.isArray(conditions.ageRange)) {
+    // Age can't be confirmed without a date of birth — an age-targeted rule doesn't apply.
+    if (!patient.dateOfBirth) return false
     const ageYears = (Date.now() - patient.dateOfBirth.getTime()) / (365.25 * 24 * 3600 * 1000)
     const [min, max] = conditions.ageRange as [number, number]
     if (ageYears < min || ageYears > max) return false
@@ -114,8 +112,14 @@ async function runSchedulerTick(): Promise<void> {
 
   if (rules.length === 0) return
 
+  const clinic = await getClinicSettings().catch(() => buildClinicSettings(null))
+  // Appointment reminders moved to the outbox (lib/appointments) — skip pre-visit rules so
+  // patients never get the same reminder twice. Post-visit (X_DAYS_AFTER) rules still run.
+  const preVisitHandledElsewhere = clinic.flags.reminders
+
   for (const rule of rules) {
     if (!rule.template.isActive || rule.triggerOffsetHours == null) continue
+    if (preVisitHandledElsewhere && rule.triggerEvent === 'X_DAYS_BEFORE') continue
 
     // The appointment time that would trigger this rule right now:
     // appointmentTime = now - offsetHours
@@ -184,7 +188,7 @@ async function runSchedulerTick(): Promise<void> {
         type:      appt.type,
         provider:  appt.provider,
         reason:    appt.reason,
-      })
+      }, clinic)
 
       // Encrypt email address before storing / queuing
       const encryptedEmail = encrypt(rawEmail)

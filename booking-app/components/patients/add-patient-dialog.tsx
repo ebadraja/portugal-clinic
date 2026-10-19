@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ChevronDown, ChevronUp, Loader2, Plus } from "lucide-react";
 import { ALL_PLANS, PLAN_TYPES } from "@/lib/insurance-plans";
+import { toE164 } from "@/lib/clinic/phone";
 import {
   Dialog,
   DialogContent,
@@ -36,9 +37,10 @@ import { useToast } from "@/components/toast-provider";
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
 
-const US_PHONE = /^\(\d{3}\) \d{3}-\d{4}$/;
-const US_ZIP   = /^\d{5}(-\d{4})?$/;
-const US_STATE = /^[A-Z]{2}$/;
+// Portuguese numbers ("912 345 678") or international ("+34 600 123 456").
+const isPhone = (v: string) => toE164(v) !== null;
+const PHONE_MSG = "Use a number like 912 345 678 or +351 912 345 678";
+const PT_POSTCODE = /^\d{4}-\d{3}$/;
 
 const patientSchema = z.object({
   firstName:       z.string().min(1, "First name is required").max(50),
@@ -51,22 +53,22 @@ const patientSchema = z.object({
       return d <= new Date();
     }, "Date of birth must be a valid date in the past"),
   gender:          z.enum(["MALE", "FEMALE", "OTHER", "PREFER_NOT_TO_SAY"]).optional(),
-  phone:           z.string().min(1, "Phone is required").regex(US_PHONE, "Use format (555) 555-5555"),
+  phone:           z.string().min(1, "Phone is required").refine(isPhone, PHONE_MSG),
   email:           z.string().email("Invalid email").or(z.literal("")).optional(),
   address:         z.string().optional(),
   city:            z.string().optional(),
-  state:           z.string().regex(US_STATE, "Use 2-letter code (e.g. TX)").or(z.literal("")).optional(),
-  zipCode:         z.string().regex(US_ZIP, "Use 5-digit zip (e.g. 78701)").or(z.literal("")).optional(),
+  state:           z.string().max(40).optional(), // distrito
+  zipCode:         z.string().regex(PT_POSTCODE, "Use the format 2665-061").or(z.literal("")).optional(),
   parentName:      z.string().optional(),
   parentRelation:  z.enum(["Spouse", "Partner", "Parent", "Child", "Sibling", "Friend", "Other", "Mother", "Father", "Guardian", "Grandparent"]).optional(),
-  parentPhone:     z.string().regex(US_PHONE, "Use format (555) 555-5555").or(z.literal("")).optional(),
+  parentPhone:     z.string().refine((v) => v === "" || isPhone(v), PHONE_MSG).optional(),
   parentEmail:     z.string().email("Invalid email").or(z.literal("")).optional(),
   parent2Name:     z.string().optional(),
   parent2Relation: z.enum(["Mother", "Father", "Guardian", "Grandparent", "Other"]).optional(),
-  parentPhone2:    z.string().regex(US_PHONE, "Use format (555) 555-5555").or(z.literal("")).optional(),
+  parentPhone2:    z.string().refine((v) => v === "" || isPhone(v), PHONE_MSG).optional(),
   parent2Email:    z.string().email("Invalid email").or(z.literal("")).optional(),
   emergencyContact: z.string().optional(),
-  emergencyPhone:  z.string().regex(US_PHONE, "Use format (555) 555-5555").or(z.literal("")).optional(),
+  emergencyPhone:  z.string().refine((v) => v === "" || isPhone(v), PHONE_MSG).optional(),
   insuranceProvider:  z.string().optional(),
   insuranceId:        z.string().optional(),
   insurancePlanType:  z.string().optional(),
@@ -75,18 +77,19 @@ const patientSchema = z.object({
   allergies:          z.string().optional(),
   medications:     z.string().optional(),
   medicalNotes:    z.string().optional(),
-  preferredLanguage: z.string().default("English"),
+  preferredLanguage: z.string().default("Português"),
 });
 
 type PatientFormValues = z.infer<typeof patientSchema>;
 
 // ── Phone auto-format ─────────────────────────────────────────────────────────
 
+// Groups a Portuguese number as "912 345 678"; international numbers keep their "+".
 function formatPhone(raw: string): string {
-  const digits = raw.replace(/\D/g, "").slice(0, 10);
-  if (digits.length < 4) return digits;
-  if (digits.length < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  const plus = raw.trim().startsWith("+");
+  const digits = raw.replace(/\D/g, "").slice(0, 15);
+  if (plus) return `+${digits}`;
+  return digits.replace(/(\d{3})(?=\d)/g, "$1 ").trim();
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -116,7 +119,7 @@ export default function AddPatientDialog({ isOpen, onClose, onSuccess }: AddPati
       insuranceProvider: "", insuranceId: "",
       insurancePlanType: "", insurancePlan: "", insuranceMemberId: "",
       allergies: "", medications: "", medicalNotes: "",
-      preferredLanguage: "English",
+      preferredLanguage: "Português",
     },
   });
 
@@ -195,14 +198,14 @@ export default function AddPatientDialog({ isOpen, onClose, onSuccess }: AddPati
                   <FormField control={form.control} name="firstName" render={({ field }) => (
                     <FormItem>
                       <FormLabel>First Name<Req /></FormLabel>
-                      <FormControl><Input placeholder="Liam" {...field} /></FormControl>
+                      <FormControl><Input placeholder="Maria" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
                   <FormField control={form.control} name="lastName" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Last Name<Req /></FormLabel>
-                      <FormControl><Input placeholder="Martinez" {...field} /></FormControl>
+                      <FormControl><Input placeholder="Silva" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -279,7 +282,7 @@ export default function AddPatientDialog({ isOpen, onClose, onSuccess }: AddPati
                       <FormLabel>Phone<Req /></FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="(555) 555-5555"
+                          placeholder="912 345 678"
                           value={field.value}
                           onChange={(e) => field.onChange(formatPhone(e.target.value))}
                         />
@@ -300,7 +303,7 @@ export default function AddPatientDialog({ isOpen, onClose, onSuccess }: AddPati
                 <FormField control={form.control} name="address" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Address</FormLabel>
-                    <FormControl><Input placeholder="123 Main Street" {...field} /></FormControl>
+                    <FormControl><Input placeholder="Rua e número" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -309,20 +312,20 @@ export default function AddPatientDialog({ isOpen, onClose, onSuccess }: AddPati
                 <div className="grid grid-cols-3 gap-4">
                   <FormField control={form.control} name="city" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>City</FormLabel>
-                      <FormControl><Input placeholder="Austin" {...field} /></FormControl>
+                      <FormLabel>Locality</FormLabel>
+                      <FormControl><Input placeholder="Malveira" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
                   <FormField control={form.control} name="state" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>State</FormLabel>
+                      <FormLabel>District</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="TX"
-                          maxLength={2}
+                          placeholder="Lisboa"
+                          maxLength={40}
                           value={field.value ?? ""}
-                          onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                          onChange={(e) => field.onChange(e.target.value)}
                         />
                       </FormControl>
                       <FormMessage />
@@ -330,13 +333,13 @@ export default function AddPatientDialog({ isOpen, onClose, onSuccess }: AddPati
                   )} />
                   <FormField control={form.control} name="zipCode" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>ZIP Code</FormLabel>
+                      <FormLabel>Postcode</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="78701"
-                          maxLength={10}
+                          placeholder="2665-061"
+                          maxLength={8}
                           value={field.value ?? ""}
-                          onChange={(e) => field.onChange(e.target.value.replace(/[^0-9-]/, ""))}
+                          onChange={(e) => field.onChange(e.target.value.replace(/[^0-9-]/g, ""))}
                         />
                       </FormControl>
                       <FormMessage />
@@ -356,7 +359,7 @@ export default function AddPatientDialog({ isOpen, onClose, onSuccess }: AddPati
                   <FormField control={form.control} name="parentName" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Contact name</FormLabel>
-                      <FormControl><Input placeholder="Carlos Martinez" {...field} /></FormControl>
+                      <FormControl><Input placeholder="Nome completo" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -389,7 +392,7 @@ export default function AddPatientDialog({ isOpen, onClose, onSuccess }: AddPati
                       <FormLabel>Contact phone</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="(555) 555-5555"
+                          placeholder="912 345 678"
                           value={field.value ?? ""}
                           onChange={(e) => field.onChange(formatPhone(e.target.value))}
                         />
@@ -420,7 +423,7 @@ export default function AddPatientDialog({ isOpen, onClose, onSuccess }: AddPati
                       <FormLabel>Emergency Phone</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="(555) 555-5555"
+                          placeholder="912 345 678"
                           value={field.value ?? ""}
                           onChange={(e) => field.onChange(formatPhone(e.target.value))}
                         />
@@ -471,7 +474,7 @@ export default function AddPatientDialog({ isOpen, onClose, onSuccess }: AddPati
                       <FormLabel>Phone</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="(555) 555-5555"
+                          placeholder="912 345 678"
                           value={field.value ?? ""}
                           onChange={(e) => field.onChange(formatPhone(e.target.value))}
                         />
@@ -508,14 +511,14 @@ export default function AddPatientDialog({ isOpen, onClose, onSuccess }: AddPati
                     <FormField control={form.control} name="insuranceProvider" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Insurance Provider</FormLabel>
-                        <FormControl><Input placeholder="Blue Cross Blue Shield" {...field} /></FormControl>
+                        <FormControl><Input placeholder="AdvanceCare" {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
                     <FormField control={form.control} name="insuranceId" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Policy / Member ID</FormLabel>
-                        <FormControl><Input placeholder="BCBS-TX-123456" {...field} /></FormControl>
+                        <FormControl><Input placeholder="Nº de beneficiário" {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />

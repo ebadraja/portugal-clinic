@@ -74,12 +74,17 @@ describe('mergeEngine (resolveMergeTags)', () => {
     expect(html).toContain('Emma')          // patient_first_name
     expect(html).toContain('Emma Johnson')  // patient_full_name
 
-    // Appointment tags resolved
-    expect(html).toContain('Well-Child Visit') // appointment_type
-    expect(html).toContain('Dr. Tamas')        // doctor_name
+    // Appointment tags resolved (dental label from the clinic's appointment types)
+    expect(html).toContain('Consulta de avaliação') // appointment_type (EVALUATION)
+    expect(html).toContain('Dr. Tamas')             // doctor_name from the appointment
 
-    // Practice constants resolved
-    expect(html).toContain('KiDS 0 to 18')
+    // Clinic wall time: 10:30 UTC on 14 July is 11:30 in Lisbon (WEST)
+    expect(html).toContain('terça-feira, 14 de julho')
+    expect(html).toContain('11:30')
+
+    // Practice details resolved from clinic settings (defaults when no row exists)
+    expect(html).toContain('Clínica Dentária Nunes Monteiro')
+    expect(html).toContain('928 494 871')
 
     // Unsubscribe link generated (not left as raw tag)
     expect(html).toContain('/api/email/unsubscribe?token=')

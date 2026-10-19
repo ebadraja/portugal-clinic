@@ -1,0 +1,19 @@
+# Upload only the booking app (Vercel Root Directory = booking-app).
+/dental-website
+/hvac-riley-webhook
+/riley-vapi-system-prompt.md
+
+# Never upload local secrets or build output
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+**/.next
+**/*.tsbuildinfo
+**/YOUR_HIPPATIZER_CONFIG.md
+**/public/uploads
+**/data/messaging-attachments
+**/logs
+booking-app/lib/generated/prisma

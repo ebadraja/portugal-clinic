@@ -2,11 +2,47 @@ import "dotenv/config"
 import { PrismaClient } from "../lib/generated/prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
 import bcrypt from "bcryptjs"
+import {
+  DEFAULT_APPOINTMENT_TYPES,
+  DEFAULT_BOOKING_POLICY,
+  DEFAULT_BUSINESS_HOURS,
+  DEFAULT_HOLIDAYS,
+  DEFAULT_IDENTITY,
+  DEFAULT_INSURERS,
+  DEFAULT_LUNCH_BREAK,
+  DEFAULT_PRACTICE,
+  DEFAULT_PROVIDERS,
+} from "../lib/clinic/settings"
+import { CLINIC_FAQ } from "../lib/knowledge/defaults"
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
 const prisma = new PrismaClient({ adapter })
 
+/**
+ * This seed DELETES every table before inserting demo data. It must never run
+ * against the clinic's real database. It refuses unless the database is local
+ * or SEED_ALLOW_DESTRUCTIVE=yes is set explicitly, and never in production.
+ */
+function assertSafeToSeed(): string {
+  const url = process.env.DATABASE_URL ?? ""
+  let host = ""
+  try {
+    host = new URL(url).hostname
+  } catch {
+    throw new Error("DATABASE_URL is missing or invalid.")
+  }
+  const local = ["localhost", "127.0.0.1", "::1"].includes(host)
+  if (process.env.NODE_ENV === "production") throw new Error("Refusing to seed: NODE_ENV=production.")
+  if (!local && process.env.SEED_ALLOW_DESTRUCTIVE !== "yes") {
+    throw new Error(`Refusing to wipe and seed the database at ${host}. This seed deletes all data. Set SEED_ALLOW_DESTRUCTIVE=yes only for a disposable non-production database.`)
+  }
+  const password = process.env.SEED_ADMIN_PASSWORD ?? ""
+  if (password.length < 10) throw new Error("Set SEED_ADMIN_PASSWORD (at least 10 characters) for the seeded admin accounts.")
+  return password
+}
+
 async function main() {
+  const seedPassword = assertSafeToSeed()
   console.log("🌱 Seeding database...")
 
   // ── 1. CLEAN existing data (order respects FK constraints) ──────────────────
@@ -27,7 +63,7 @@ async function main() {
   await prisma.user.deleteMany()
 
   // ── 2. USERS ────────────────────────────────────────────────────────────────
-  const passwordHash = await bcrypt.hash("Kid0-18CRM", 12)
+  const passwordHash = await bcrypt.hash(seedPassword, 12)
 
   const admin = await prisma.user.create({
     data: {
@@ -894,102 +930,46 @@ async function main() {
   console.log("  ✓ Documents (5)")
 
   // ── 9. SETTINGS ─────────────────────────────────────────────────────────────
+  // Clinic facts (dental-website/website-requirements.md §1) — the same defaults the CRM uses.
   await prisma.settings.create({
     data: {
-      practiceName: "Kids 0-18 Integrated Pediatrics",
-      practiceTagline: "Growing Healthy Families",
-      practicePhone: "(512) 555-0180",
-      practiceEmail: "hello@kids018.com",
-      practiceAddress: "3500 Bee Cave Rd, Suite 200, Austin, TX 78746",
-      practiceWebsite: "https://kids018.com",
-      businessHours: [
-        { day: "Monday", open: "08:00", close: "17:00", enabled: true },
-        { day: "Tuesday", open: "08:00", close: "17:00", enabled: true },
-        { day: "Wednesday", open: "08:00", close: "17:00", enabled: true },
-        { day: "Thursday", open: "08:00", close: "17:00", enabled: true },
-        { day: "Friday", open: "08:00", close: "17:00", enabled: true },
-        { day: "Saturday", open: "09:00", close: "13:00", enabled: true },
-        { day: "Sunday", open: "09:00", close: "13:00", enabled: false },
-      ],
-      lunchBreak: { start: "12:00", end: "13:00", enabled: true },
-      holidays: ["2024-07-04", "2024-11-28", "2024-12-25", "2025-01-01"],
+      practiceName: DEFAULT_PRACTICE.name,
+      practiceTagline: DEFAULT_PRACTICE.tagline,
+      practicePhone: DEFAULT_PRACTICE.phone,
+      practiceEmail: DEFAULT_PRACTICE.email,
+      practiceAddress: DEFAULT_PRACTICE.address,
+      practiceWebsite: DEFAULT_PRACTICE.website,
+      timezone: "Europe/Lisbon",
+      locale: "pt-PT",
+      businessHours: DEFAULT_BUSINESS_HOURS,
+      lunchBreak: DEFAULT_LUNCH_BREAK,
+      holidays: DEFAULT_HOLIDAYS,
+      appointmentTypes: DEFAULT_APPOINTMENT_TYPES,
+      bookingPolicy: DEFAULT_BOOKING_POLICY,
+      providers: DEFAULT_PROVIDERS,
+      insurers: DEFAULT_INSURERS,
+      clinicIdentity: DEFAULT_IDENTITY,
       voiceAgentEnabled: true,
-      voiceAgentName: "Jenny",
-      voiceProvider: "11labs",
-      greetingMessage: "Thank you for calling Kids 0-18 Integrated Pediatrics! I'm Jenny, your virtual assistant. I can help you schedule appointments, answer questions, and more. How can I help you today?",
-      toneSlider: 65,
-      speedSlider: 50,
-      empathySlider: 80,
-      emergencyPhone: "(512) 555-0199",
-      chatbotEnabled: true,
-      chatbotWelcomeMsg: "Hi there! 👋 Welcome to Kids 0-18 Integrated Pediatrics. I can help you book appointments, answer questions about our services, or connect you with our team. What can I help you with?",
-      chatbotPosition: "bottom-right",
-      chatbotTheme: "blue",
-      autoTriggerSeconds: 30,
-      notificationEmail: "alerts@kids018.com",
-      smsEnabled: true,
+      voiceAgentName: "Acácia",
+      emergencyPhone: DEFAULT_PRACTICE.phone,
+      notificationEmail: DEFAULT_PRACTICE.email,
       emailEnabled: true,
       emailNewBooking: true,
       emailCancellation: true,
       emailEscalation: true,
       emailNewPatient: true,
-      emailDailySummary: true,
-      emailWeeklyAnalytics: false,
-      twoFactorRequired: false,
-      sessionTimeout: 60,
-      appointmentTypes: [
-        { id: "evaluation", name: "Evaluation", duration: 30, color: "#3b82f6", providers: [], buffer: 5 },
-        { id: "hygiene", name: "Hygiene", duration: 45, color: "#06b6d4", providers: [], buffer: 5 },
-        { id: "restorative", name: "Restorative", duration: 45, color: "#10b981", providers: [], buffer: 5 },
-        { id: "endodontics", name: "Endodontics", duration: 60, color: "#8b5cf6", providers: [], buffer: 10 },
-        { id: "implant", name: "Implant", duration: 60, color: "#6366f1", providers: [], buffer: 10 },
-        { id: "orthodontics", name: "Orthodontics", duration: 30, color: "#0ea5e9", providers: [], buffer: 5 },
-        { id: "aesthetics", name: "Aesthetics", duration: 45, color: "#ec4899", providers: [], buffer: 5 },
-        { id: "surgery", name: "Surgery", duration: 60, color: "#ef4444", providers: [], buffer: 10 },
-        { id: "emergency", name: "Emergency", duration: 30, color: "#f59e0b", providers: [], buffer: 5 },
-        { id: "follow-up", name: "Follow-Up", duration: 20, color: "#f97316", providers: [], buffer: 5 },
-        { id: "consultation", name: "Consultation", duration: 30, color: "#14b8a6", providers: [], buffer: 5 },
-      ],
-      integrations: [
-        { name: "Twilio", service: "SMS / Voice", status: "connected", lastSync: "2024-05-18T08:00:00Z" },
-        { name: "Vapi", service: "AI Voice Agent", status: "connected", lastSync: "2024-05-18T08:00:00Z" },
-        { name: "OpenAI", service: "AI / NLP", status: "connected", lastSync: "2024-05-18T08:00:00Z" },
-        { name: "Webflow", service: "Website / Chatbot", status: "connected", lastSync: "2024-05-17T15:00:00Z" },
-        { name: "Google Calendar", service: "Calendar Sync", status: "disconnected", lastSync: null },
-        { name: "Stripe", service: "Billing", status: "pending", lastSync: null },
-      ],
     },
   })
 
   console.log("  ✓ Settings (1)")
 
   // ── 10. KNOWLEDGE ITEMS ─────────────────────────────────────────────────────
-  const faqs = [
-    { category: "Appointments", question: "How do I schedule an appointment?", answer: "You can book an appointment by calling our office at (512) 555-0180, using our website chatbot, or speaking with our AI assistant Jenny. We offer same-day sick visits when available.", timesAsked: 142, priority: 10 },
-    { category: "Appointments", question: "What are your office hours?", answer: "We're open Monday through Friday 8 AM–5 PM and Saturday 9 AM–1 PM. We're closed Sundays. For after-hours urgent concerns, please call our nurse line.", timesAsked: 128, priority: 9 },
-    { category: "Insurance", question: "What insurance plans do you accept?", answer: "We accept most major insurance plans including Blue Cross Blue Shield, Aetna, Cigna, United Healthcare, Humana, and Medicaid/CHIP. Please call to verify your specific plan.", timesAsked: 115, priority: 10 },
-    { category: "Services", question: "Do you see newborns and infants?", answer: "Yes! We see patients from birth through age 18. We recommend scheduling your newborn's first visit within 3–5 days of leaving the hospital.", timesAsked: 97, priority: 8 },
-    { category: "Appointments", question: "How do I cancel or reschedule an appointment?", answer: "Please call us at least 24 hours in advance to cancel or reschedule. You can also cancel through our automated phone line or chatbot at any time.", timesAsked: 89, priority: 7 },
-    { category: "Medical", question: "What vaccines does my child need?", answer: "We follow the CDC and AAP recommended immunization schedule. Your child's specific vaccines depend on their age. We'll review the full schedule at every well-child visit.", timesAsked: 76, priority: 8 },
-    { category: "Services", question: "Do you offer telehealth appointments?", answer: "Yes, we offer telehealth video visits for follow-ups, medication management, and non-urgent concerns. Call or chat to schedule a virtual appointment.", timesAsked: 71, priority: 6 },
-    { category: "Medical", question: "When should I bring my child in for a sick visit vs. urgent care?", answer: "Come to us first for fevers, ear infections, sore throats, rashes, and minor injuries. Go to urgent care or the ER for severe difficulty breathing, uncontrolled bleeding, or altered consciousness.", timesAsked: 68, priority: 9 },
-    { category: "Insurance", question: "Do you accept Medicaid or CHIP?", answer: "Yes, we proudly accept Texas Medicaid (STAR) and CHIP. Every child deserves quality pediatric care regardless of insurance type.", timesAsked: 54, priority: 7 },
-    { category: "Services", question: "Do you provide sports physicals?", answer: "Yes! Sports physicals (PPE forms) are available for school and league requirements. These are quick appointments — call to schedule or we can often fit you in same-week.", timesAsked: 49, priority: 5 },
-  ]
+  // The website FAQ, so the site and Acácia give identical answers.
+  await prisma.knowledgeItem.createMany({
+    data: CLINIC_FAQ.map((f) => ({ ...f, isActive: true, sourceUrl: "dental-website FAQ" })),
+  })
 
-  await Promise.all(
-    faqs.map((faq) =>
-      prisma.knowledgeItem.create({
-        data: {
-          ...faq,
-          lastAskedAt: new Date(),
-          isActive: true,
-        },
-      })
-    )
-  )
-
-  console.log("  ✓ Knowledge items (10)")
+  console.log(`  ✓ Knowledge items (${CLINIC_FAQ.length})`)
 
   // ── 11. AUDIT LOGS ──────────────────────────────────────────────────────────
   await Promise.all([
@@ -1008,8 +988,9 @@ async function main() {
   console.log("   2 admin users  |  8 patients  |  10 appointments")
   console.log("   7 call logs    |  4 chat logs  |  6 patient notes")
   console.log("   5 documents    |  10 FAQs      |  7 audit logs")
-  console.log("\n   Login: jonathan@kids0218.com / Kid0-18CRM")
-  console.log("   Login: ebadraja1402@gmail.com / Kid0-18CRM")
+  console.log("")
+  console.log("   Admin logins use the SEED_ADMIN_PASSWORD you provided.")
+  console.log("   Patients, calls and chats are synthetic demo records for local development only.")
 }
 
 main()

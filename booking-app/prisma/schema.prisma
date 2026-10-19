@@ -62,6 +62,8 @@ enum BookingSource {
   CHATBOT
   WEBSITE
   WALK_IN
+  PATIENT_LINK // patient confirmed/cancelled via the link in a reminder
+  IMPORT       // migrated from a previous system (Zappy)
 }
 
 enum CallIntent {
@@ -289,7 +291,13 @@ model User {
   approvalStatus   UserApprovalStatus @default(APPROVED) @map("approval_status")
   twoFactorEnabled Boolean           @default(false) @map("two_factor_enabled")
   twoFactorSecret  String?   @map("two_factor_secret")
+  // Last accepted TOTP time-step — a code can't be replayed within its 30 s window.
+  twoFactorLastStep Int?     @map("two_factor_last_step")
   lastLoginAt      DateTime? @map("last_login_at")
+  // One-time password token (invite or reset). Only the SHA-256 hash is stored.
+  passwordTokenHash      String?   @map("password_token_hash")
+  passwordTokenExpiresAt DateTime? @map("password_token_expires_at")
+  passwordTokenPurpose   String?   @map("password_token_purpose") // "invite" | "reset"
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
@@ -308,6 +316,7 @@ model User {
   sharedInboxMemberships        SharedInboxMember[]
   createdMessageTemplates       MessageTemplate[]           @relation("TemplateCreator")
   createdBroadcasts             Broadcast[]                 @relation("BroadcastCreator")
+  assignedCallbacks             CallbackRequest[]           @relation("CallbackAssignee")
 
   @@map("users")
 }
@@ -317,7 +326,9 @@ model Patient {
   firstName   String   @map("first_name")
   middleName  String?  @map("middle_name")
   lastName    String   @map("last_name")
-  dateOfBirth DateTime @map("date_of_birth")
+  // Optional: records imported from Zappy often have no birth date. Voice identity
+  // then falls back to caller ID + full name (lib/voice/identity.ts).
+  dateOfBirth DateTime? @map("date_of_birth")
   gender      Gender?
 
   // External system ID (Develo import dedupe)
@@ -368,6 +379,12 @@ model Patient {
   // Membership (Develo import — not wired to logic yet)
   membershipStatus  String? @map("membership_status")
 
+  // Portuguese tax number and how the patient found the clinic (Zappy "origem")
+  nif          String?
+  clientSource String? @map("client_source")
+  // Appointment confirmations/reminders by SMS (transactional; marketing consent is separate)
+  smsRemindersEnabled Boolean @default(true) @map("sms_reminders_enabled")
+
   // Status & tracking
   status       PatientStatus @default(ACTIVE)
   totalVisits  Int           @default(0) @map("total_visits")
@@ -390,6 +407,8 @@ model Patient {
   conversation Conversation?
   portalSessions PatientPortalSession[]
   smsOptOuts   SMSOptOut[]
+  callbackRequests CallbackRequest[]
+  appointmentNotifications AppointmentNotification[]
   smsOptOut    Boolean @default(false) @map("sms_opt_out")
   privateMode  Boolean @default(false) @map("private_mode")
 
@@ -423,18 +442,98 @@ model Appointment {
 
   bookedVia BookingSource @default(STAFF) @map("booked_via")
 
+  // Agenda — `providerId` is the id of an entry in Settings.providers; `provider`
+  // keeps the display name in sync for the emails/reports that read it.
+  providerId     String?   @map("provider_id")
+  seriesId       String?   @map("series_id")        // recurring bookings share one id
+  checkedInAt    DateTime? @map("checked_in_at")    // patient arrived ("Chegou")
+  allowedOverlap Boolean   @default(false) @map("allowed_overlap") // staff knowingly double-booked
+  // SHA-256 of the patient's confirm/cancel link token; the token itself is never stored.
+  publicTokenHash String?  @unique @map("public_token_hash")
+  // Previous-system id, e.g. "zappy:12345" — makes the importer idempotent.
+  externalId      String?  @unique @map("external_id")
+
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   createdById String?  @map("created_by_id")
   createdBy   User?    @relation(fields: [createdById], references: [id])
 
-  callLog CallLog?
-  chatLog ChatLog?
+  callLog       CallLog?
+  chatLog       ChatLog?
+  events        AppointmentEvent[]
+  notifications AppointmentNotification[]
 
   @@index([startTime])
   @@index([status])
   @@index([patientId])
+  @@index([providerId, startTime])
+  @@index([seriesId])
   @@map("appointments")
+}
+
+// Time nobody can be booked in: personal time, vacation, training.
+// providerId null = the whole clinic. Repeating blocks are separate rows sharing seriesId.
+model CalendarBlock {
+  id          String   @id @default(cuid())
+  providerId  String?  @map("provider_id")
+  startTime   DateTime @map("start_time")
+  endTime     DateTime @map("end_time")
+  kind        String   @default("TIME_OFF") // TIME_OFF | VACATION | MEETING | OTHER
+  reason      String?
+  seriesId    String?  @map("series_id")
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([startTime, endTime])
+  @@index([seriesId])
+  @@map("calendar_blocks")
+}
+
+// What happened to an appointment, shown as its history in the agenda.
+model AppointmentEvent {
+  id            String      @id @default(cuid())
+  appointmentId String      @map("appointment_id")
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  // CREATED RESCHEDULED UPDATED CANCELLED CONFIRMED CHECKED_IN COMPLETED NO_SHOW
+  // NOTIFICATION_SENT NOTIFICATION_DELIVERED NOTIFICATION_FAILED
+  kind          String
+  actor         String  // STAFF | VOICE_AGENT | PATIENT | SYSTEM | IMPORT
+  userId        String? @map("user_id")
+  vapiCallId    String? @map("vapi_call_id")
+  data          Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([appointmentId, createdAt])
+  @@map("appointment_events")
+}
+
+// Outbox of patient messages about an appointment (confirmation, reminders, change notices).
+// Sent by /api/cron/dispatch — no Redis or long-running worker needed.
+model AppointmentNotification {
+  id                String      @id @default(cuid())
+  appointmentId     String      @map("appointment_id")
+  appointment       Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patientId         String      @map("patient_id")
+  patient           Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  kind              String      // CONFIRMATION | REMINDER_DAY_BEFORE | REMINDER_HOURS_BEFORE | RESCHEDULED | CANCELLED
+  channel           String      // SMS | EMAIL
+  sendAt            DateTime    @map("send_at")
+  status            String      @default("PENDING") // PENDING SENDING SENT FAILED SKIPPED CANCELLED
+  attempts          Int         @default(0)
+  lockedAt          DateTime?   @map("locked_at")
+  sentAt            DateTime?   @map("sent_at")
+  providerMessageId String?     @unique @map("provider_message_id") // Twilio SID / email message id
+  deliveryStatus    String?     @map("delivery_status")             // delivered | undelivered | failed
+  error             String?
+  // `${appointmentId}:${kind}:${channel}:${startTime ISO}` — one message per slot, ever.
+  dedupeKey         String      @unique @map("dedupe_key")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  @@index([status, sendAt])
+  @@index([appointmentId])
+  @@map("appointment_notifications")
 }
 
 model CallLog {
@@ -573,9 +672,36 @@ model Settings {
   lunchBreak    Json? @map("lunch_break")
   holidays      Json?
 
+  // Locale — all clinic-facing dates/times are interpreted in this IANA zone
+  timezone String @default("Europe/Lisbon")
+  locale   String @default("pt-PT")
+
+  // Clinic identity for footers / agent (JSON: {legalName, nif, ersNumber, omdNumbers, complaintsBookUrl})
+  clinicIdentity Json? @map("clinic_identity")
+  // Booking rules (JSON: {newPatientMode, cancellationNoticeHours, lateToleranceMinutes, recallMonths, slotMinutes, maxDaysAhead})
+  bookingPolicy  Json? @map("booking_policy")
+  // Providers (JSON: [{id, name, title, registrationNumber, active}])
+  providers      Json?
+  // Insurers (JSON: {accepted: string[], notAccepted: string[], note})
+  insurers       Json?
+
+  // Background worker liveness (written by worker.ts every minute)
+  workerHeartbeatAt DateTime? @map("worker_heartbeat_at")
+
+  // Agenda + patient reminders (docs/agenda). Off by default so deploying changes nothing.
+  agendaV2Enabled  Boolean   @default(false) @map("agenda_v2_enabled")
+  remindersEnabled Boolean   @default(false) @map("reminders_enabled")
+  // JSON: see ReminderPolicySchema in lib/clinic/settings.ts
+  reminderPolicy   Json?     @map("reminder_policy")
+  // Last successful run of /api/cron/dispatch
+  dispatchHeartbeatAt DateTime? @map("dispatch_heartbeat_at")
+
   // Voice agent (Vapi / 11labs)
   voiceAgentEnabled Boolean @default(false) @map("voice_agent_enabled")
-  voiceAgentName    String  @default("Jenny") @map("voice_agent_name")
+  // Kill switch honoured by every voice-agent tool. Default off so deploying changes nothing;
+  // when true, booking/lookup tools refuse and the agent is told to transfer or take a callback.
+  voiceToolsPaused  Boolean @default(false) @map("voice_tools_paused")
+  voiceAgentName    String  @default("Acácia") @map("voice_agent_name")
   voiceProvider     String  @default("11labs") @map("voice_provider")
   voiceId           String? @map("voice_id")
   greetingMessage   String? @map("greeting_message") @db.Text
@@ -1179,14 +1305,76 @@ model Broadcast {
 
 model SMSOptOut {
   id          String    @id @default(uuid())
-  patientId   String    @map("patient_id")
+  // Nullable + SetNull: an opt-out is keyed by phone number and must outlive the patient record.
+  patientId   String?   @map("patient_id")
   phoneNumber String    @map("phone_number")
   optedOutAt  DateTime  @default(now()) @map("opted_out_at")
   optedInAt   DateTime? @map("opted_in_at")
   isOptedOut  Boolean   @default(true) @map("is_opted_out")
 
-  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patient Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
 
   @@index([phoneNumber])
   @@map("sms_opt_outs")
+}
+
+// ─── Voice agent: webhook delivery log ──────────────────────────────────────────
+// One row per delivery (accepted or refused). Metadata only — no transcript or
+// payload body is stored here (data minimisation); the CallLog holds the record.
+
+model VoiceWebhookEvent {
+  id         String   @id @default(uuid())
+  provider   String   @default("vapi")
+  eventType  String   @map("event_type")
+  callId     String?  @map("call_id")
+  outcome    String // processed | duplicate | rejected | error | ignored
+  reason     String?
+  receivedAt DateTime @default(now()) @map("received_at")
+
+  @@index([receivedAt])
+  @@index([outcome, receivedAt])
+  @@map("voice_webhook_events")
+}
+
+// ─── Callback work queue ────────────────────────────────────────────────────────
+
+enum CallbackStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum CallbackUrgency {
+  LOW
+  NORMAL
+  URGENT
+}
+
+model CallbackRequest {
+  id           String          @id @default(uuid())
+  callerName   String          @map("caller_name")
+  phone        String
+  reason       String          @db.Text
+  urgency      CallbackUrgency @default(NORMAL)
+  isNewPatient Boolean         @default(false) @map("is_new_patient")
+  source       BookingSource   @default(VOICE_AGENT)
+  status       CallbackStatus  @default(OPEN)
+
+  patientId    String?  @map("patient_id")
+  patient      Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  assignedToId String?  @map("assigned_to_id")
+  assignedTo   User?    @relation("CallbackAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  vapiCallId   String?  @map("vapi_call_id")
+
+  dueAt          DateTime? @map("due_at")
+  resolutionNote String?   @map("resolution_note") @db.Text
+  completedAt    DateTime? @map("completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status, urgency])
+  @@index([createdAt])
+  @@map("callback_requests")
 }

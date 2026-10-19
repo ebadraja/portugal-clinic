@@ -29,7 +29,7 @@ interface PatientOption {
   id: string
   firstName: string
   lastName: string
-  dateOfBirth: string
+  dateOfBirth: string | null
   phone: string | null
 }
 
@@ -207,7 +207,7 @@ function PatientCombobox({ onChange, defaultPatientId, error }: PatientComboboxP
               {selected.firstName} {selected.lastName}
             </span>
             <span className="text-xs text-muted-foreground flex-shrink-0">
-              DOB {format(new Date(selected.dateOfBirth), "MM/dd/yyyy")}
+              DOB {selected.dateOfBirth ? format(new Date(selected.dateOfBirth), "dd/MM/yyyy") : "—"}
             </span>
             <button type="button" onClick={clear}
               className="ml-1 rounded hover:bg-muted p-0.5 transition-colors flex-shrink-0">
@@ -276,7 +276,7 @@ function PatientCombobox({ onChange, defaultPatientId, error }: PatientComboboxP
                           {p.firstName} {p.lastName}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
-                          DOB {format(new Date(p.dateOfBirth), "MM/dd/yyyy")}
+                          DOB {p.dateOfBirth ? format(new Date(p.dateOfBirth), "dd/MM/yyyy") : "—"}
                           {p.phone && ` · ${p.phone}`}
                         </p>
                       </div>

@@ -6,6 +6,7 @@ import { appendSystemMessage } from '@/lib/messaging/systemMessages'
 import type { MessagingTriggerEvent } from '@/lib/generated/prisma/client'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { buildTriggerKey } from '@/lib/messaging/automationCoordination'
+import { isPatientOptedOutByAnyRoute } from '@/lib/messaging/optOut'
 
 export async function getVerifiedPortalPhone(patientId: string): Promise<string | null> {
   const session = await prisma.patientPortalSession.findFirst({
@@ -20,18 +21,8 @@ export async function getVerifiedPortalPhone(patientId: string): Promise<string 
   return session?.phoneNumber ?? null
 }
 
-export async function isPatientSmsOptedOut(patientId: string): Promise<boolean> {
-  const patient = await prisma.patient.findUnique({
-    where: { id: patientId },
-    select: { smsOptOut: true },
-  })
-  if (patient?.smsOptOut) return true
-
-  const optOut = await prisma.sMSOptOut.findFirst({
-    where: { patientId, isOptedOut: true },
-    select: { id: true },
-  })
-  return optOut !== null
+export async function isPatientSmsOptedOut(patientId: string, destinationPhone?: string | null): Promise<boolean> {
+  return isPatientOptedOutByAnyRoute(patientId, [destinationPhone])
 }
 
 const SYSTEM_EVENT_LABELS: Record<MessagingTriggerEvent, string> = {
@@ -69,10 +60,6 @@ export async function queueAutomationSms(input: QueueAutomationSmsInput): Promis
     entityId,
   } = input
 
-  if (await isPatientSmsOptedOut(patientId)) {
-    return false
-  }
-
   const verifiedPhone = await getVerifiedPortalPhone(patientId)
   if (!verifiedPhone) {
     return false
@@ -83,6 +70,11 @@ export async function queueAutomationSms(input: QueueAutomationSmsInput): Promis
     phoneE164 = formatPhoneE164(verifiedPhone)
   } catch {
     console.error(`[message-scheduler] invalid verified phone patientId=${patientId}`)
+    return false
+  }
+
+  // Opt-out check covers the patient and the exact destination number (opt-outs outlive records).
+  if (await isPatientSmsOptedOut(patientId, phoneE164)) {
     return false
   }
 

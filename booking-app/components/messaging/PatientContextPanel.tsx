@@ -99,7 +99,7 @@ export function PatientContextPanel({ patient, loading, collapsed, onToggle }: P
                 {patient.firstName} {patient.lastName}
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                Age {calculateAge(patient.dateOfBirth)} · {patient.status}
+                {patient.dateOfBirth ? `Age ${calculateAge(patient.dateOfBirth)}` : 'DOB missing'} · {patient.status}
               </p>
               {patient.parentName && (
                 <p className="text-xs text-slate-500 mt-1">Guardian: {patient.parentName}</p>

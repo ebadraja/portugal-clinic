@@ -74,8 +74,12 @@ export async function POST(req: NextRequest) {
   const rawBody  = Buffer.from(await req.arrayBuffer())
   const bodyText = rawBody.toString('utf8')
 
-  // Signature verification (skip if public key not configured — dev mode)
+  // Signature verification — fails closed: this route is public (proxy.ts), so an
+  // unconfigured key must not let anyone post delivery events.
   const publicKey = process.env.SENDGRID_WEBHOOK_PUBLIC_KEY
+  if (!publicKey && process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'SendGrid webhook verification key not configured' }, { status: 503 })
+  }
   if (publicKey) {
     const signature = req.headers.get('x-twilio-email-event-webhook-signature') ?? ''
     const timestamp = req.headers.get('x-twilio-email-event-webhook-timestamp')  ?? ''
@@ -90,7 +94,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 })
     }
   } else {
-    console.warn('[sendgrid-webhook] SENDGRID_WEBHOOK_PUBLIC_KEY not set — skipping signature check')
+    console.warn('[sendgrid-webhook] SENDGRID_WEBHOOK_PUBLIC_KEY not set — skipping signature check (development only)')
   }
 
   let events: SendGridEvent[]

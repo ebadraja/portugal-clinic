@@ -70,7 +70,7 @@ const FAKE_MESSAGES = [
     id: 'm2',
     role: 'staff' as const,
     channel: 'Portal',
-    content: "Of course! Let me check Dr. Tamas's availability for Monday.",
+    content: "Of course! Let me check Dra. Ana Nunes' availability for Monday.",
     time: '10:44 AM',
   },
   {
@@ -177,7 +177,7 @@ export function MessagingPreview() {
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <div className="shrink-0 border-b border-slate-200 dark:border-slate-800 px-4 py-3">
             <h2 className="font-semibold text-slate-900 dark:text-slate-50">Sarah Mitchell</h2>
-            <p className="text-xs text-slate-500 mt-0.5">(555) 301-1001 · Assigned to Dr. Tamas</p>
+            <p className="text-xs text-slate-500 mt-0.5">912 345 678 · Assigned to Dra. Ana Nunes</p>
           </div>
 
           <div className="flex-1 overflow-hidden px-4 py-4 bg-slate-50 dark:bg-slate-950/50 space-y-3">
@@ -254,7 +254,7 @@ export function MessagingPreview() {
           <p className="font-semibold">Sarah Mitchell</p>
           <p className="text-xs text-slate-500 mt-1">Age 8 · ACTIVE</p>
           <p className="text-xs text-slate-500 mt-1">Guardian: Sarah Mitchell</p>
-          <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">(555) 301-1001</p>
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">912 345 678</p>
           <p className="text-xs text-slate-600 dark:text-slate-400">Insurance: Premera Blue Cross</p>
           <div className="mt-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
@@ -262,7 +262,7 @@ export function MessagingPreview() {
             </p>
             <div className="rounded-md border border-slate-200 dark:border-slate-700 p-2 text-xs">
               <p className="font-medium">Mon, Jun 16 · 9:15 AM</p>
-              <p className="text-slate-500">Well-child · Dr. Tamas</p>
+              <p className="text-slate-500">Higiene oral · Dra. Ana Nunes</p>
             </div>
           </div>
         </aside>

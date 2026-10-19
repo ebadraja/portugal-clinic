@@ -1,29 +1,28 @@
-export const PLAN_TYPES = ["Commercial", "Apple Health"] as const;
+// Insurers recorded on a patient's file (Portugal). Which of these the clinic
+// actually works with is configured in Settings → AI Voice Agent → Insurers.
+export const PLAN_TYPES = ["Seguro de saúde", "Acordo / protocolo", "Particular"] as const;
 export type PlanType = (typeof PLAN_TYPES)[number];
 
-export const COMMERCIAL_PLANS = [
-  "Aetna",
-  "Ambetter",
-  "Asuris Northwest",
-  "Blue Cross Blue Shield FEP",
-  "Cigna",
-  "First Health Network",
-  "First Choice Health Network",
-  "LifeWise",
-  "Premera Blue Cross",
-  "Regence Blue Shield",
-  "Tricare/TriWest",
-  "United Healthcare",
+export const HEALTH_INSURERS = [
+  "AdvanceCare",
+  "Médis",
+  "Multicare",
+  "Allianz",
+  "Fidelidade",
+  "Ageas",
+  "Generali / Tranquilidade",
+  "Outro",
 ] as const;
 
-export const APPLE_HEALTH_PLANS = [
-  "Coordinated Care",
-  "Molina",
-  "United Healthcare",
-  "Wellpoint",
+export const AGREEMENTS = [
+  "RNA-ADE",
+  "Liga dos Combatentes",
+  "ADSE",
+  "Outro",
 ] as const;
 
 export const ALL_PLANS: Record<PlanType, readonly string[]> = {
-  Commercial: COMMERCIAL_PLANS,
-  "Apple Health": APPLE_HEALTH_PLANS,
+  "Seguro de saúde": HEALTH_INSURERS,
+  "Acordo / protocolo": AGREEMENTS,
+  Particular: ["Sem seguro"],
 };

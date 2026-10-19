@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveMergeTags, getAvailableVariables } from '@/lib/email/mergeTags'
+import { DEFAULT_BOOKING_POLICY, DEFAULT_PRACTICE, DEFAULT_PROVIDERS } from '@/lib/clinic/settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,25 +60,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 function syntheticPreview(htmlBody: string, subject: string, plainBody: string) {
   const vars: Record<string, string> = {
-    patient_first_name:        'Alex',
-    patient_full_name:         'Alex Johnson',
-    patient_dob:               'January 5, 2020',
-    patient_age:               '5 years old',
-    parent_first_name:         'Sarah',
-    parent_full_name:          'Sarah Johnson',
-    parent_email:              'sarah@example.com',
-    parent_phone:              '(555) 987-6543',
-    appointment_date:          'Monday, July 14, 2026',
-    appointment_time:          '10:30 AM',
-    appointment_type:          'Well-Child Visit',
-    doctor_name:               'Dr. Tamas',
-    practice_name:             'KiDS 0 to 18 Integrative Pediatrics',
-    practice_phone:            '(555) 123-4567',
-    practice_address:          '123 Medical Plaza Drive, Suite 100',
-    practice_website:          'https://kids018.com',
+    // Sample patient; practice details are the clinic's own defaults.
+    patient_first_name:        'Maria',
+    patient_full_name:         'Maria Silva',
+    patient_dob:               '12/03/1985',
+    patient_age:               '41 anos',
+    parent_first_name:         'Maria',
+    parent_full_name:          'Maria Silva',
+    parent_email:              'maria.silva@example.com',
+    parent_phone:              '912 345 678',
+    appointment_date:          'terça-feira, 20 de outubro',
+    appointment_time:          '10:30',
+    appointment_type:          'Consulta de avaliação',
+    doctor_name:               DEFAULT_PROVIDERS[0]?.name ?? '',
+    practice_name:             DEFAULT_PRACTICE.name,
+    practice_phone:            DEFAULT_PRACTICE.phone,
+    practice_address:          DEFAULT_PRACTICE.address,
+    practice_website:          DEFAULT_PRACTICE.website,
     develo_link:               'https://develo.health/example',
     novopsych_link:            'https://novopsych.com.au/example',
-    cancellation_policy_hours: '48',
+    cancellation_policy_hours: String(DEFAULT_BOOKING_POLICY.cancellationNoticeHours),
     unsubscribe_link:          '#unsubscribe',
     view_in_browser_link:      '#view',
   }

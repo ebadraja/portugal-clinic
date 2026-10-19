@@ -50,7 +50,7 @@ interface ApiCallLog {
   sentiment: string
   transcript: string | null
   summary: string | null
-  recordingUrl: string | null
+  hasRecording: boolean
   wasEscalated: boolean
   escalationReason: string | null
   transferredTo: string | null
@@ -322,20 +322,15 @@ function TranscriptDialog({
           )}
 
           {/* Recording player */}
-          {log.recordingUrl && (
-            <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-4 flex items-center gap-4">
-              <a
-                href={log.recordingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center hover:bg-blue-700 transition-colors flex-shrink-0"
-              >
-                <Play className="h-4 w-4 text-white fill-white" />
-              </a>
-              <div className="flex-1">
-                <div className="bg-slate-300 dark:bg-slate-600 h-1.5 rounded-full mb-1.5" />
-                <p className="text-xs text-slate-500">Call recording</p>
-              </div>
+          {log.hasRecording && (
+            <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-4 space-y-2">
+              <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                <Play className="h-3.5 w-3.5" />Call recording (streamed securely — every playback is logged)
+              </p>
+              {/* Same-origin proxy: the session cookie authorises it; the provider URL never reaches the browser. */}
+              <audio controls preload="none" className="w-full" src={`/api/call-logs/${log.id}/recording`}>
+                Your browser cannot play this recording.
+              </audio>
             </div>
           )}
 

@@ -9,7 +9,7 @@ const m = vi.hoisted(() => {
 
   const mockPrisma = {
     patient: { findUnique: vi.fn(), update: vi.fn() },
-    sMSOptOut: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    sMSOptOut: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     patientPortalSession: { findFirst: vi.fn() },
     settings: { findFirst: vi.fn() },
   }
@@ -106,6 +106,8 @@ describe('lib/messaging/smsProvider', () => {
 
     it('normalizes international numbers longer than 11 digits', () => {
       expect(formatPhoneE164('923041102372')).toBe('+923041102372')
+      expect(formatPhoneE164('912 345 678')).toBe('+351912345678')
+      expect(formatPhoneE164('00351912345678')).toBe('+351912345678')
       expect(formatPhoneE164('+923041102372')).toBe('+923041102372')
     })
 
@@ -243,6 +245,29 @@ describe('STOP/START keyword handling', () => {
       where: { id: 'patient-1' },
       data: { smsOptOut: false },
     })
+    // START clears every opt-out recorded against the number, whoever it was filed under
+    expect(m.mockPrisma.sMSOptOut.updateMany).toHaveBeenCalledWith({
+      where: { phoneNumber: '+12534004479', isOptedOut: true },
+      data: expect.objectContaining({ isOptedOut: false }),
+    })
+  })
+
+  it('records STOP from a number that matches no patient', async () => {
+    vi.mocked(findPatientByPhone).mockResolvedValue(null as never)
+    m.mockPrisma.sMSOptOut.findFirst.mockResolvedValue(null)
+    m.mockPrisma.sMSOptOut.create.mockResolvedValue({ id: 'opt-9' })
+
+    await handleSmsOptKeyword('+351912345678', 'stop')
+
+    expect(m.mockPrisma.sMSOptOut.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ phoneNumber: '+351912345678', isOptedOut: true }),
+    })
+  })
+
+  it('understands Portuguese keywords', () => {
+    expect(classifySmsKeyword('parar')).toBe('stop')
+    expect(classifySmsKeyword('SAIR')).toBe('stop')
+    expect(classifySmsKeyword('iniciar')).toBe('start')
   })
 })
 

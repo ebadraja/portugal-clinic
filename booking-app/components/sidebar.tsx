@@ -22,6 +22,7 @@ import {
   Mail,
   Zap,
   Inbox,
+  PhoneCall,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -37,6 +38,7 @@ const navItems = [
   { name: "Patients", href: "/patients", icon: Users },
   { name: "Appointments", href: "/appointments", icon: Calendar },
   { name: "Call Logs", href: "/call-logs", icon: Phone },
+  { name: "Callbacks", href: "/callbacks", icon: PhoneCall },
   { name: "Chat Logs", href: "/chat-logs", icon: MessageSquare },
   { name: "Messaging", href: "/messaging", icon: Inbox },
   { name: "Intake Forms", href: "/intake-forms", icon: FileText },
@@ -54,6 +56,8 @@ const navItems = [
 const NAV_COUNT_SOURCES: { href: string; url: string }[] = [
   { href: "/appointments", url: "/api/appointments/new-count" },
   { href: "/call-logs", url: "/api/call-logs/new-count" },
+  // Open callbacks (not "new since") — the queue stays visible until handled.
+  { href: "/callbacks", url: "/api/callbacks/new-count" },
   { href: "/chat-logs", url: "/api/chat-logs/new-count" },
   { href: "/intake-forms", url: "/api/intake-forms/new-count" },
   { href: "/patients", url: "/api/patient-drafts/new-count" },
@@ -100,7 +104,7 @@ function SidebarContent({
     <>
       {/* Logo Area with gradient */}
       <div className={cn(
-        "relative border-b border-slate-900/50 bg-gradient-to-b from-slate-900 to-slate-950",
+        "relative border-b border-blue-950/40 bg-gradient-to-b from-blue-800 to-blue-950",
         isMobile ? "p-4" : "p-6"
       )}>
         <div className="flex items-center gap-3">
@@ -109,7 +113,7 @@ function SidebarContent({
           </div>
           <div>
             <h1 className="font-semibold text-base leading-tight text-white">Nunes Monteiro</h1>
-            <p className="text-xs text-slate-400">Clínica Dentária</p>
+            <p className="text-xs text-blue-200/80">Clínica Dentária</p>
           </div>
         </div>
       </div>
@@ -321,7 +325,7 @@ export function Sidebar() {
   return (
     <>
       {/* Desktop Sidebar - Hidden on mobile/tablet */}
-      <aside className="hidden lg:flex w-64 bg-slate-950 text-white h-screen fixed left-0 top-0 flex-col border-r border-slate-900/50">
+      <aside className="hidden lg:flex w-64 bg-blue-950 text-white h-screen fixed left-0 top-0 flex-col border-r border-blue-900/50">
         <SidebarContent badgeCounts={badgeCounts} />
       </aside>
 
@@ -331,7 +335,7 @@ export function Sidebar() {
           <SheetTrigger className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex-shrink-0">
             <Menu className="h-5 w-5 text-slate-700 dark:text-slate-300" />
           </SheetTrigger>
-          <SheetContent side="left" className="w-72 bg-slate-950 text-white p-0 flex flex-col">
+          <SheetContent side="left" className="w-72 bg-blue-950 text-white p-0 flex flex-col">
             <SidebarContent isMobile={true} badgeCounts={badgeCounts} />
           </SheetContent>
         </Sheet>

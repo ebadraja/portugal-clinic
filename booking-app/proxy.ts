@@ -8,8 +8,17 @@ function isPublicRoute(pathname: string): boolean {
   if (pathname.startsWith("/api/portal")) return true
   // Website chat widget API
   if (pathname.startsWith("/api/webchat")) return true
+  // Links inside patient emails (signed tokens) and the SendGrid event webhook (signature-verified)
+  if (pathname === "/api/email/unsubscribe") return true
+  if (pathname === "/api/email/view") return true
+  if (pathname === "/api/email/webhook/sendgrid") return true
   // Patient portal pages
   if (pathname.startsWith("/portal")) return true
+  // Appointment confirm/cancel link from reminders (/c/<token>, token-scoped) and its API
+  if (pathname.startsWith("/c/")) return true
+  if (pathname.startsWith("/api/public/appointment/")) return true
+  // Reminder dispatcher — authorised by CRON_SECRET in the handler
+  if (pathname === "/api/cron/dispatch") return true
   // Embeddable widget assets from /public
   if (
     /^\/(webchat-widget\.js|webchat-core\.js|webchat-test\.html)$/.test(pathname)
@@ -40,6 +49,18 @@ export default auth(async (req) => {
   // Protected routes — must be logged in
   if (!isLoggedIn) {
     return Response.redirect(new URL("/login", req.nextUrl))
+  }
+
+  // Clinic policy requires two-factor for admins: until it's set up, only the setup
+  // page and its APIs are reachable (the jwt callback computes mustEnroll2fa).
+  if (session?.user?.mustEnroll2fa) {
+    const allowed = pathname === "/setup-2fa" || pathname.startsWith("/api/account/2fa")
+    if (!allowed) {
+      if (pathname.startsWith("/api/")) {
+        return Response.json({ error: "Set up two-factor sign-in first" }, { status: 403 })
+      }
+      return Response.redirect(new URL("/setup-2fa", req.nextUrl))
+    }
   }
 })
 

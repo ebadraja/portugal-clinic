@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Prisma } from "@/lib/generated/prisma/client"
 import prisma from "@/lib/prisma"
+import { requestMeta, requireStaff } from "@/lib/auth/guards"
+import { toPublicCallLogs } from "@/lib/voice/callLogPublic"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 // ── GET /api/patients/[id] ────────────────────────────────────────────────────
+// GDPR: every read of a patient record is audited (who, when, from where).
 
-export async function GET(_req: NextRequest, { params }: RouteContext) {
+export async function GET(req: NextRequest, { params }: RouteContext) {
   try {
+    const guard = await requireStaff()
+    if (!guard.ok) return guard.response
     const { id } = await params
 
     const patient = await prisma.patient.findUnique({
@@ -46,7 +51,18 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 })
     }
 
-    return NextResponse.json(patient)
+    prisma.auditLog.create({
+      data: {
+        userId: guard.user.id,
+        action: "READ",
+        entity: "patient",
+        entityId: id,
+        ...requestMeta(req),
+        timestamp: new Date(),
+      },
+    }).catch(() => {})
+
+    return NextResponse.json({ ...patient, callLogs: toPublicCallLogs(patient.callLogs) })
   } catch (error) {
     console.error("[GET /api/patients/[id]]", error)
     return NextResponse.json({ error: "Failed to fetch patient" }, { status: 500 })
@@ -70,6 +86,8 @@ type UpdatableField = (typeof UPDATABLE_FIELDS)[number]
 
 export async function PUT(req: NextRequest, { params }: RouteContext) {
   try {
+    const guard = await requireStaff({ write: true })
+    if (!guard.ok) return guard.response
     const { id } = await params
     const body = await req.json()
 
@@ -95,6 +113,19 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
 
     const patient = await prisma.patient.update({ where: { id }, data })
 
+    // Field names only — values are personal data and stay out of the audit trail.
+    prisma.auditLog.create({
+      data: {
+        userId: guard.user.id,
+        action: "UPDATE",
+        entity: "patient",
+        entityId: id,
+        changes: { fields: Object.keys(data) },
+        ...requestMeta(req),
+        timestamp: new Date(),
+      },
+    }).catch(() => {})
+
     return NextResponse.json(patient)
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -108,17 +139,31 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
 }
 
 // ── DELETE /api/patients/[id] ─────────────────────────────────────────────────
-// Soft-delete only: sets status → ARCHIVED.
-// HIPAA requires retention of patient records — hard deletes are not permitted.
+// Soft-delete only: sets status → ARCHIVED. Permanent erasure (GDPR art. 17)
+// is a separate admin workflow: POST /api/patients/[id]/erase.
 
-export async function DELETE(_req: NextRequest, { params }: RouteContext) {
+export async function DELETE(req: NextRequest, { params }: RouteContext) {
   try {
+    const guard = await requireStaff({ write: true })
+    if (!guard.ok) return guard.response
     const { id } = await params
 
     await prisma.patient.update({
       where: { id },
       data: { status: "ARCHIVED" },
     })
+
+    prisma.auditLog.create({
+      data: {
+        userId: guard.user.id,
+        action: "UPDATE",
+        entity: "patient",
+        entityId: id,
+        changes: { status: "ARCHIVED" },
+        ...requestMeta(req),
+        timestamp: new Date(),
+      },
+    }).catch(() => {})
 
     return NextResponse.json({ message: "Patient archived successfully" })
   } catch (error) {

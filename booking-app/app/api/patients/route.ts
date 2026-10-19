@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import type { Prisma } from "@/lib/generated/prisma/client"
+import { requestMeta, requireStaff } from "@/lib/auth/guards"
+
+const SORTABLE = new Set(["createdAt", "updatedAt", "firstName", "lastName", "dateOfBirth", "lastVisitAt", "status"])
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireStaff()
+    if (!guard.ok) return guard.response
     const { searchParams } = request.nextUrl
 
     const search = searchParams.get("search") ?? ""
     const status = searchParams.get("status") ?? "all"
     const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10))
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "20", 10)))
-    const sortBy = searchParams.get("sortBy") ?? "createdAt"
-    const sortOrder = (searchParams.get("sortOrder") ?? "desc") as "asc" | "desc"
+    const requestedSort = searchParams.get("sortBy") ?? "createdAt"
+    const sortBy = SORTABLE.has(requestedSort) ? requestedSort : "createdAt"
+    const sortOrder: "asc" | "desc" = searchParams.get("sortOrder") === "asc" ? "asc" : "desc"
 
     const where: Prisma.PatientWhereInput = {}
 
@@ -62,15 +68,22 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireStaff({ write: true })
+    if (!guard.ok) return guard.response
     const body = await request.json()
 
     const { firstName, lastName, dateOfBirth, phone, parentName } = body
 
-    if (!firstName || !lastName || !dateOfBirth || !phone) {
+    if (!firstName || !lastName || !phone) {
       return NextResponse.json(
-        { error: "Missing required fields: firstName, lastName, dateOfBirth, phone" },
+        { error: "Missing required fields: firstName, lastName, phone" },
         { status: 400 }
       )
+    }
+    // Optional so the desk can create a patient mid-call from the agenda; confirmed at the visit.
+    const dob = dateOfBirth ? new Date(dateOfBirth) : null
+    if (dob && isNaN(dob.getTime())) {
+      return NextResponse.json({ error: "Invalid dateOfBirth value" }, { status: 400 })
     }
 
     const patient = await prisma.patient.create({
@@ -78,7 +91,7 @@ export async function POST(request: NextRequest) {
         firstName,
         lastName,
         middleName: body.middleName,
-        dateOfBirth: new Date(dateOfBirth),
+        dateOfBirth: dob,
         phone,
         parentName: parentName || null,
         parentRelation: body.parentRelation,
@@ -104,15 +117,27 @@ export async function POST(request: NextRequest) {
         allergies: body.allergies,
         medications: body.medications,
         medicalNotes: body.medicalNotes,
-        preferredLanguage: body.preferredLanguage ?? "English",
+        preferredLanguage: body.preferredLanguage ?? "Português",
         preferredProvider: body.preferredProvider,
         secondaryLanguage: body.secondaryLanguage,
         raceEthnicity: body.raceEthnicity,
         membershipStatus: body.membershipStatus,
         privateMode: body.privateMode === true,
         status: "ACTIVE",
+        createdById: guard.user.id,
       },
     })
+
+    prisma.auditLog.create({
+      data: {
+        userId: guard.user.id,
+        action: "CREATE",
+        entity: "patient",
+        entityId: patient.id,
+        ...requestMeta(request),
+        timestamp: new Date(),
+      },
+    }).catch(() => {})
 
     return NextResponse.json(patient, { status: 201 })
   } catch (error) {

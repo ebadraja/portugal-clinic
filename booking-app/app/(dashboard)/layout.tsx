@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { IdleLogout } from "@/components/auth/idle-logout";
 
 export default function DashboardLayout({
   children,
@@ -10,6 +11,7 @@ export default function DashboardLayout({
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <Sidebar />
       <Header />
+      <IdleLogout />
       <main className="lg:ml-64 pt-16 px-4 md:px-6 lg:px-8 pb-8 min-h-screen overflow-x-hidden">
         {children}
       </main>

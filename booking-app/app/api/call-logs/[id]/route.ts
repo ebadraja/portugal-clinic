@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { Prisma } from "@/lib/generated/prisma/client"
 import prisma from "@/lib/prisma"
 import { auth } from "@/auth"
+import { toPublicCallLog } from "@/lib/voice/callLogPublic"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -12,6 +13,7 @@ type RouteContext = { params: Promise<{ id: string }> }
 export async function GET(req: NextRequest, { params }: RouteContext) {
   try {
     const session = await auth()
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { id }  = await params
 
     const callLog = await prisma.callLog.findUnique({
@@ -59,7 +61,7 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
       },
     }).catch(() => {})
 
-    return NextResponse.json(callLog)
+    return NextResponse.json(toPublicCallLog(callLog))
   } catch (error) {
     console.error("[GET /api/call-logs/[id]]", error)
     return NextResponse.json({ error: "Failed to fetch call log" }, { status: 500 })
@@ -77,6 +79,7 @@ type PatchableField = (typeof PATCHABLE)[number]
 export async function PATCH(req: NextRequest, { params }: RouteContext) {
   try {
     const session = await auth()
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { id }  = await params
     const body     = await req.json()
 
@@ -148,7 +151,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       },
     })
 
-    return NextResponse.json(after)
+    return NextResponse.json(toPublicCallLog(after))
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
       return NextResponse.json({ error: "Call log not found" }, { status: 404 })

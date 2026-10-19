@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Calendar,
 } from "lucide-react";
+import { toE164 } from "@/lib/clinic/phone";
 
 interface AddAppointmentModalProps {
   open: boolean;
@@ -117,9 +118,8 @@ export default function AddAppointmentModal({
 
       case "patientPhone":
         if (!value) return "Patient phone is required";
-        const phoneRegex = /^\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})$/;
-        if (!phoneRegex.test(value.replace(/\s/g, "")))
-          return "Phone must be in format: (555) 123-4567";
+        if (!toE164(value))
+          return "Use a number like 912 345 678 or +351 912 345 678";
         return null;
 
       case "appointmentDate":
@@ -356,7 +356,7 @@ export default function AddAppointmentModal({
                   type="tel"
                   value={formData.patientPhone}
                   onChange={(e) => handleFieldChange("patientPhone", e.target.value)}
-                  placeholder="(555) 123-4567"
+                  placeholder="912 345 678"
                   className={`text-sm ${
                     errors.patientPhone
                       ? "border-red-300 focus:border-red-500 focus:ring-red-500/20"

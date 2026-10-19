@@ -1,7 +1,8 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { NextRequest, NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
+import { issuePasswordToken, unusablePasswordHash } from '@/lib/auth/passwordTokens';
+import { emailDeliveryConfigured, sendPasswordLinkEmail } from '@/lib/auth/passwordEmails';
 
 export async function GET() {
   try {
@@ -64,21 +65,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const normalizedEmail = String(email).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return NextResponse.json({ error: 'Invalid email address' }, { status: 400 });
+    }
+    const existing = await prisma.user.findFirst({ where: { email: { equals: normalizedEmail, mode: 'insensitive' } } });
     if (existing) {
       return NextResponse.json({ error: 'A user with this email already exists' }, { status: 409 });
     }
 
-    // Use Kid0-18CRM as the default password for invited users
-    const passwordHash = await bcrypt.hash('Kid0-18CRM', 12);
+    // No shared default password: the account gets an unknowable hash and a one-time
+    // set-password link (emailed, or shown once to the inviting admin).
+    const passwordHash = await unusablePasswordHash();
 
-    const dbRole = role.toUpperCase() as 'ADMIN' | 'STAFF' | 'VIEWER';
+    const dbRole = String(role).toUpperCase() as 'ADMIN' | 'STAFF' | 'VIEWER';
+    if (!['ADMIN', 'STAFF', 'VIEWER'].includes(dbRole)) {
+      return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
+    }
 
     const newUser = await prisma.user.create({
       data: {
         firstName,
         lastName,
-        email,
+        email: normalizedEmail,
         passwordHash,
         role: dbRole,
         jobTitle: jobTitle || department || null,
@@ -118,7 +127,22 @@ export async function POST(req: NextRequest) {
       })),
     });
 
-    return NextResponse.json({ success: true, user: newUser }, { status: 201 });
+    const { url, expiresAt } = await issuePasswordToken(newUser.id, 'invite');
+    const emailSent = (await emailDeliveryConfigured())
+      ? await sendPasswordLinkEmail({ to: normalizedEmail, firstName, url, purpose: 'invite' })
+      : false;
+
+    return NextResponse.json(
+      {
+        success: true,
+        user: { id: newUser.id, firstName: newUser.firstName, lastName: newUser.lastName, email: newUser.email, role: newUser.role, approvalStatus: newUser.approvalStatus },
+        emailSent,
+        // Shown once to the inviting admin only when the email could not be delivered.
+        inviteUrl: emailSent ? undefined : url,
+        expiresAt: expiresAt.toISOString(),
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error('[STAFF_POST]', error);
     return NextResponse.json({ error: 'Failed to create staff member' }, { status: 500 });

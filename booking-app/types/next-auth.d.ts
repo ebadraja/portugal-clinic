@@ -10,6 +10,10 @@ declare module "next-auth" {
       lastName: string
       jobTitle?: string
       avatar?: string
+      twoFactorEnabled: boolean
+      /** Clinic policy requires two-factor and this admin hasn't set it up yet. */
+      mustEnroll2fa: boolean
+      idleMinutes: number
     } & DefaultSession["user"]
   }
 
@@ -19,6 +23,7 @@ declare module "next-auth" {
     lastName: string
     jobTitle?: string
     avatar?: string
+    twoFactorEnabled?: boolean
   }
 }
 
@@ -30,5 +35,10 @@ declare module "next-auth/jwt" {
     lastName?: string
     jobTitle?: string
     avatar?: string
+    twoFactorEnabled?: boolean
+    mustEnroll2fa?: boolean
+    idleMinutes?: number
+    /** ms epoch of the last authenticated request (server-side idle timeout) */
+    lastActivity?: number
   }
 }

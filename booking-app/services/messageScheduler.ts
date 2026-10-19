@@ -282,8 +282,12 @@ export async function runMessageSchedulerTick(): Promise<{ rules: number; queued
     include: { template: { select: { id: true, body: true } } },
   })
 
+  // Appointment reminders moved to the outbox (lib/appointments) — never send them twice.
+  const outbox = await prisma.settings.findFirst({ select: { remindersEnabled: true } })
+
   let queued = 0
   for (const rule of rules) {
+    if (outbox?.remindersEnabled && rule.triggerEvent === 'APPOINTMENT_REMINDER') continue
     queued += await processRule(rule, now)
   }
 

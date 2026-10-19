@@ -17,6 +17,7 @@ const m = vi.hoisted(() => {
     message: { findMany: vi.fn() },
     emailLog: { findMany: vi.fn() },
     patientPortalSession: { findFirst: vi.fn() },
+    settings: { findFirst: vi.fn().mockResolvedValue(null) },
   }
 
   return {
@@ -127,6 +128,18 @@ describe('messageScheduler', () => {
         appointmentId: 'appt-1',
       }),
     )
+  })
+
+  it('leaves appointment reminders to the outbox once reminders are switched on (no double SMS)', async () => {
+    const apptTime = new Date(Date.now() + 48 * 3_600_000)
+    m.mockPrisma.settings.findFirst.mockResolvedValueOnce({ remindersEnabled: true })
+    m.mockPrisma.messagingAutomationRule.findMany.mockResolvedValue([makeRule()])
+    m.mockPrisma.appointment.findMany.mockResolvedValue([makeAppointment(apptTime)])
+
+    const result = await runMessageSchedulerOnce()
+
+    expect(result.queued).toBe(0)
+    expect(m.mockQueueAutomationSms).not.toHaveBeenCalled()
   })
 
   it('does not trigger 48h rule for appointment ~47h away (outside window)', async () => {

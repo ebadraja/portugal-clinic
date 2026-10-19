@@ -13,8 +13,10 @@
 
 import sanitizeHtml from 'sanitize-html'
 import { SignJWT } from 'jose'
-import { format, differenceInYears } from 'date-fns'
+import { differenceInYears } from 'date-fns'
 import { prisma } from '@/lib/prisma'
+import { buildClinicSettings, getClinicSettings, type ClinicSettings } from '@/lib/clinic/settings'
+import { formatDateLong, formatDateShort, formatTime } from '@/lib/clinic/time'
 
 // ─── sanitize-html config (permissive for email templates) ───────────────────
 
@@ -114,56 +116,17 @@ async function signToken(
     .sign(key)
 }
 
-// ─── Cancellation policy: 48h for Monday + post-US-holiday, 24h otherwise ───
+// ─── Clinic configuration ────────────────────────────────────────────────────
+// Practice details, appointment-type labels, cancellation notice, time zone and
+// locale all come from Settings (lib/clinic/settings.ts) — never from constants,
+// so reminders can't carry a stale phone number or the pediatric 48-hour rule.
 
-const US_HOLIDAY_MMDD = new Set([
-  '01-01', // New Year's Day
-  '06-19', // Juneteenth
-  '07-04', // Independence Day
-  '11-11', // Veterans Day
-  '12-25', // Christmas
-])
-
-function isNearHoliday(date: Date): boolean {
-  // Check if day before the appointment is a fixed-date holiday
-  const dayBefore = new Date(date)
-  dayBefore.setDate(dayBefore.getDate() - 1)
-  const mmdd = `${String(dayBefore.getMonth() + 1).padStart(2, '0')}-${String(dayBefore.getDate()).padStart(2, '0')}`
-  return US_HOLIDAY_MMDD.has(mmdd)
-}
-
-function getCancellationPolicyHours(appointmentDate: Date): number {
-  const dow = appointmentDate.getDay() // 0=Sun, 1=Mon
-  if (dow === 1) return 48             // Monday always 48h
-  if (isNearHoliday(appointmentDate)) return 48
-  return 24
-}
-
-// ─── Appointment type display label ──────────────────────────────────────────
-
-const APPT_TYPE_LABELS: Record<string, string> = {
-  EVALUATION:   'Evaluation',
-  HYGIENE:      'Hygiene',
-  RESTORATIVE:  'Restorative',
-  ENDODONTICS:  'Endodontics',
-  IMPLANT:      'Implant',
-  ORTHODONTICS: 'Orthodontics',
-  AESTHETICS:   'Aesthetics',
-  SURGERY:      'Surgery',
-  EMERGENCY:    'Emergency',
-  FOLLOW_UP:    'Follow-Up Visit',
-  CONSULTATION: 'Consultation',
-  PROCEDURE:    'Procedure',
-  OTHER:        'Appointment',
-}
-
-// ─── Practice constants (override via env vars) ───────────────────────────────
-
-const PRACTICE = {
-  name:    process.env.PRACTICE_NAME    ?? 'Clínica Dentária Nunes Monteiro',
-  phone:   process.env.PRACTICE_PHONE   ?? '928 494 871',
-  address: process.env.PRACTICE_ADDRESS ?? 'Rua Miguel Judicibus Ferreira 29A, Malveira',
-  website: process.env.PRACTICE_WEBSITE ?? 'https://clinicadentariaih.com',
+async function loadClinic(): Promise<ClinicSettings> {
+  try {
+    return await getClinicSettings()
+  } catch {
+    return buildClinicSettings(null)
+  }
 }
 
 // ─── Main engine ─────────────────────────────────────────────────────────────
@@ -174,6 +137,8 @@ export async function resolveMergeTags(
   patientId:        string,
   appointmentId?:   string,
 ): Promise<{ subject: string; html: string; plain: string }> {
+
+  const clinic = await loadClinic()
 
   // ── 1. Fetch patient ──────────────────────────────────────────────────────
   const patient = await prisma.patient.findUnique({
@@ -214,7 +179,7 @@ export async function resolveMergeTags(
   )
 
   const unsubscribeLink  = `${baseUrl}/api/email/unsubscribe?token=${unsubscribeToken}`
-  const viewInBrowserLink = `${baseUrl}/email/view?token=${viewToken}`
+  const viewInBrowserLink = `${baseUrl}/api/email/view?token=${viewToken}`
 
   // ── 4. Develo & NovoPsych links ───────────────────────────────────────────
   // These are extracted from appointment notes using a JSON block, or built from env vars.
@@ -231,25 +196,27 @@ export async function resolveMergeTags(
   }
 
   // ── 5. Build variable map ─────────────────────────────────────────────────
-  const age = patient
-    ? differenceInYears(new Date(), patient.dateOfBirth)
-    : 0
+  const dob = patient?.dateOfBirth ?? null
+  const age = dob ? differenceInYears(new Date(), dob) : 0
 
   const patientFirstName = patient?.firstName ?? 'Patient'
   const patientFullName  = patient ? `${patient.firstName} ${patient.lastName}` : 'Patient'
-  const patientDob       = patient ? format(patient.dateOfBirth, 'MMMM d, yyyy') : ''
-  const patientAge       = patient ? `${age} year${age !== 1 ? 's' : ''} old` : ''
+  // DOB is a calendar date stored at UTC midnight — format it in UTC.
+  const patientDob       = dob ? formatDateShort(dob, 'UTC', clinic.locale) : ''
+  const patientAge       = dob ? `${age} year${age !== 1 ? 's' : ''} old` : ''
 
   const parentFirstName  = patient?.parentName?.split(' ')[0] ?? 'Contact'
   const parentFullName   = patient?.parentName ?? 'Contact'
   const parentEmail      = patient?.parentEmail ?? patient?.email ?? ''
   const parentPhone      = patient?.parentPhone ?? patient?.phone ?? ''
 
-  const apptDate         = appointment ? format(appointment.startTime, 'EEEE, MMMM d, yyyy') : ''
-  const apptTime         = appointment ? format(appointment.startTime, 'h:mm a') : ''
-  const apptType         = appointment ? (APPT_TYPE_LABELS[appointment.type] ?? 'Appointment') : ''
-  const doctorName       = appointment?.provider ?? 'Dr. Tamas'
-  const cancelHours      = appointment ? String(getCancellationPolicyHours(appointment.startTime)) : '24'
+  const apptDate         = appointment ? formatDateLong(appointment.startTime, clinic.timezone, clinic.locale) : ''
+  const apptTime         = appointment ? formatTime(appointment.startTime, clinic.timezone, clinic.locale) : ''
+  const apptType         = appointment
+    ? (clinic.appointmentTypes.find((t) => t.type === appointment!.type)?.label ?? 'Consulta')
+    : ''
+  const doctorName       = appointment?.provider ?? clinic.providers.find((p) => p.active)?.name ?? ''
+  const cancelHours      = String(clinic.bookingPolicy.cancellationNoticeHours)
 
   const vars: Record<string, string> = {
     // Patient
@@ -271,10 +238,10 @@ export async function resolveMergeTags(
     doctor_name:          doctorName,
 
     // Practice
-    practice_name:        PRACTICE.name,
-    practice_phone:       PRACTICE.phone,
-    practice_address:     PRACTICE.address,
-    practice_website:     PRACTICE.website,
+    practice_name:        clinic.practice.name,
+    practice_phone:       clinic.practice.phone,
+    practice_address:     clinic.practice.address,
+    practice_website:     clinic.practice.website,
 
     // External service links
     develo_link:          develoLink,
@@ -419,7 +386,7 @@ export function getAvailableVariables(): VariableDefinition[] {
       description: "Assigned provider name",
       category: 'appointment',
       requiresAppointment: true,
-      fallback: 'Dr. Tamas',
+      fallback: 'Dra. Ana Nunes',
     },
 
     // ── Practice ───────────────────────────────────────────────────────────

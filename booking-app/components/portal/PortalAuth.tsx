@@ -109,7 +109,7 @@ export function PortalAuth() {
                 id="phone"
                 type="tel"
                 inputMode="tel"
-                placeholder="(555) 123-4567"
+                placeholder="912 345 678"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className="h-11"

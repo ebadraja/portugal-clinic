@@ -62,3 +62,5 @@ YOUR_HIPPATIZER_CONFIG.md
 *.tsbuildinfo
 next-env.d.ts
 **/next-env.d.ts
+
+.vercel

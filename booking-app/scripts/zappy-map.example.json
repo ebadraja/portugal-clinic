@@ -1,0 +1,29 @@
+{
+  "_help": "Copy to scripts/zappy-map.json and adjust after the first dry run lists the real Zappy service and staff names. Types: EVALUATION HYGIENE RESTORATIVE ENDODONTICS IMPLANT ORTHODONTICS AESTHETICS SURGERY EMERGENCY FOLLOW_UP CONSULTATION PROCEDURE OTHER. Staff ids are the dentist ids in Settings → Practice Information → Dentists.",
+  "services": {
+    "Consulta de avaliação": "EVALUATION",
+    "Primeira consulta": "EVALUATION",
+    "Consulta": "CONSULTATION",
+    "Destartarização": "HYGIENE",
+    "Higiene oral": "HYGIENE",
+    "Limpeza": "HYGIENE",
+    "Restauração": "RESTORATIVE",
+    "Obturação": "RESTORATIVE",
+    "Desvitalização": "ENDODONTICS",
+    "Endodontia": "ENDODONTICS",
+    "Implante": "IMPLANT",
+    "Ortodontia": "ORTHODONTICS",
+    "Consulta de ortodontia": "ORTHODONTICS",
+    "Branqueamento": "AESTHETICS",
+    "Extração": "SURGERY",
+    "Urgência": "EMERGENCY",
+    "Controlo": "FOLLOW_UP",
+    "Revisão": "FOLLOW_UP"
+  },
+  "staff": {
+    "Ana Nunes": "ana-nunes",
+    "Dra. Ana Nunes": "ana-nunes"
+  },
+  "defaultType": "OTHER",
+  "defaultProviderId": null
+}

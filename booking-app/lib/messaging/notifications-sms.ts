@@ -7,6 +7,7 @@ import {
 import { formatPhoneE164 } from '@/lib/messaging/smsProvider'
 import { getSmsProviderConfig } from '@/lib/messaging/smsSettings'
 import { queueSms } from '@/services/messageQueue'
+import { clearOptOutsForNumber, isPatientOptedOutByAnyRoute } from '@/lib/messaging/optOut'
 
 const ACTIVE_SESSION_MS = 5 * 60 * 1000
 
@@ -51,11 +52,7 @@ async function isPatientActiveInPortal(patientId: string): Promise<boolean> {
  * and are NOT gated by this check.
  */
 export async function hasSmsConsent(patientId: string): Promise<boolean> {
-  const patient = await prisma.patient.findUnique({
-    where: { id: patientId },
-    select: { smsOptOut: true },
-  })
-  if (patient?.smsOptOut) return false
+  if (await isPatientOptedOutByAnyRoute(patientId)) return false
 
   const optIn = await prisma.sMSOptOut.findFirst({
     where: {
@@ -184,8 +181,9 @@ export async function notifyPatientOfNewMessage({
 
 export type SmsOptKeyword = 'stop' | 'start'
 
-const STOP_KEYWORDS = new Set(['STOP', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'])
-const START_KEYWORDS = new Set(['START', 'SUBSCRIBE', 'UNSTOP'])
+// English carrier keywords + Portuguese equivalents (PARAR / SAIR; INICIAR to resume).
+const STOP_KEYWORDS = new Set(['STOP', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT', 'PARAR', 'SAIR'])
+const START_KEYWORDS = new Set(['START', 'SUBSCRIBE', 'UNSTOP', 'INICIAR'])
 
 export function classifySmsKeyword(body: string): SmsOptKeyword | null {
   const normalized = body.trim().toUpperCase()
@@ -203,7 +201,19 @@ export async function handleSmsOptKeyword(
 ): Promise<void> {
   const patient = await findPatientByPhone(phoneE164)
   if (!patient) {
-    console.log(`[sms-webhook] ${keyword} from unknown phone (no patient match)`)
+    // Opt-outs are keyed by number and must hold even before (or after) a patient record exists.
+    const existing = await prisma.sMSOptOut.findFirst({ where: { patientId: null, phoneNumber: phoneE164 } })
+    const data =
+      keyword === 'stop'
+        ? { isOptedOut: true, optedOutAt: new Date(), optedInAt: null }
+        : { isOptedOut: false, optedInAt: new Date() }
+    if (existing) {
+      await prisma.sMSOptOut.update({ where: { id: existing.id }, data })
+    } else {
+      await prisma.sMSOptOut.create({ data: { phoneNumber: phoneE164, ...data } })
+    }
+    if (keyword === 'start') await clearOptOutsForNumber(phoneE164)
+    console.log(`[sms-webhook] ${keyword} recorded for unmatched number`)
     return
   }
 
@@ -262,6 +272,7 @@ export async function handleSmsOptKeyword(
       },
     })
   }
+  await clearOptOutsForNumber(phoneE164)
 
   await prisma.patient.update({
     where: { id: patient.id },

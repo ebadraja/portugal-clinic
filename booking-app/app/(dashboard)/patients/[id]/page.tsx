@@ -19,6 +19,7 @@ import {
 import AddAppointmentModal from "@/components/add-appointment-modal";
 import AddNotesModal from "@/components/add-notes-modal";
 import UploadDocumentsModal from "@/components/upload-documents-modal";
+import { PatientGdprActions } from "@/components/patients/gdpr-actions";
 import { format } from "date-fns";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -28,7 +29,7 @@ interface Patient {
   firstName: string;
   middleName: string | null;
   lastName: string;
-  dateOfBirth: string;
+  dateOfBirth: string | null;
   gender: string | null;
   phone: string | null;
   email: string | null;
@@ -139,6 +140,8 @@ export default function PatientDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const patientId = params.id as string;
+  // Booking goes through the agenda (same rules as Acácia); it opens in "booking for" mode.
+  const bookInAgenda = () => router.push(`/appointments?agenda=1&patient=${encodeURIComponent(patientId)}`);
 
   const [patient, setPatient] = useState<Patient | null>(null);
   const [intakeForms, setIntakeForms] = useState<IntakeFormRow[]>([]);
@@ -337,7 +340,7 @@ export default function PatientDetailPage() {
   }
 
   const fullName = `${patient.firstName} ${patient.lastName}`;
-  const patientAge = age(patient.dateOfBirth);
+  const patientAge = patient.dateOfBirth ? age(patient.dateOfBirth) : null;
   const color = avatarColor(fullName);
   const ini = initials(patient.firstName, patient.lastName);
 
@@ -364,9 +367,10 @@ export default function PatientDetailPage() {
               <Button onClick={() => setIsEditing(true)} variant="outline" size="sm" className="gap-1.5">
                 <Edit className="h-4 w-4" />Edit Patient
               </Button>
-              <Button onClick={() => setAddAppointmentOpen(true)} size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white">
+              <Button onClick={bookInAgenda} size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white">
                 <Calendar className="h-4 w-4" />Book Appointment
               </Button>
+              <PatientGdprActions patientId={patient.id} fullName={`${patient.firstName} ${patient.lastName}`} />
             </>
           )}
         </div>
@@ -403,8 +407,14 @@ export default function PatientDetailPage() {
                   )}
                 </div>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  DOB: {format(new Date(patient.dateOfBirth), "MMMM d, yyyy")}
-                  <span className="text-slate-400 ml-2">(Age {patientAge})</span>
+                  {patient.dateOfBirth ? (
+                    <>
+                      DOB: {format(new Date(patient.dateOfBirth), "MMMM d, yyyy")}
+                      <span className="text-slate-400 ml-2">(Age {patientAge})</span>
+                    </>
+                  ) : (
+                    <span className="text-amber-600 dark:text-amber-400">Date of birth missing — confirm at the next visit</span>
+                  )}
                 </p>
                 {patient.phone && <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">📞 {patient.phone}</p>}
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
@@ -558,7 +568,7 @@ export default function PatientDetailPage() {
                 {/* Appointments */}
                 <TabsContent value="appointments" className="mt-0">
                   <div className="flex justify-end mb-3">
-                    <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => setAddAppointmentOpen(true)}>
+                    <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={bookInAgenda}>
                       <Plus className="h-4 w-4" />Book Appointment
                     </Button>
                   </div>

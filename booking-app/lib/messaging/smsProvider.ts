@@ -6,7 +6,7 @@
 import twilio from 'twilio'
 
 export type TwilioMessagesApi = {
-  create: (opts: { body: string; from: string; to: string }) => Promise<{ sid: string }>
+  create: (opts: { body: string; from: string; to: string; statusCallback?: string }) => Promise<{ sid: string }>
 }
 
 export type TwilioClientLike = {
@@ -47,6 +47,8 @@ export function setTwilioClientForTests(client: TwilioClientLike | null): void {
 /**
  * Normalize a phone number to E.164.
  * - Already has + prefix → keep country digits
+ * - 00 prefix → international
+ * - 9 digits starting 2/3/9 → Portugal (+351)
  * - 10 digits → US (+1)
  * - 11 digits starting with 1 → US (+1…)
  * - Longer than 11 digits → international (+digits only)
@@ -60,6 +62,16 @@ export function formatPhoneE164(phone: string): string {
 
   if (trimmed.startsWith('+')) {
     return `+${digits}`
+  }
+
+  // International prefix typed as 00 (e.g. 00351…)
+  if (digits.startsWith('00') && digits.length > 10) {
+    return `+${digits.slice(2)}`
+  }
+
+  // Portuguese national number (9 digits: mobiles 9x, landlines 2x/3x) — the clinic's country
+  if (digits.length === 9 && /^[239]/.test(digits)) {
+    return `+351${digits}`
   }
 
   if (digits.length === 10) {
@@ -122,10 +134,13 @@ export async function sendSMS({
   to,
   body,
   client,
+  statusCallback,
 }: {
   to: string
   body: string
   client?: TwilioClientLike
+  /** Twilio posts delivery updates (delivered / undelivered / failed) here. */
+  statusCallback?: string
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const from = getTwilioFromNumber()
   if (!from) {
@@ -145,6 +160,7 @@ export async function sendSMS({
       body,
       from,
       to: normalizedTo,
+      ...(statusCallback && { statusCallback }),
     })
     return { success: true, messageId: message.sid }
   } catch (err) {

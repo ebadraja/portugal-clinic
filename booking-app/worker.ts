@@ -18,6 +18,7 @@ import { startWorker as startEmailWorker, REDIS_URL } from './services/emailQueu
 import { startSmsWorker } from './services/messageQueue'
 import { startEmailScheduler } from './services/emailScheduler'
 import { startMessageScheduler } from './services/messageScheduler'
+import { prisma } from './lib/prisma'
 
 console.log('[worker] starting background worker process...')
 console.log(`[worker] Redis: ${REDIS_URL}`)
@@ -38,10 +39,23 @@ console.log('[worker] BullMQ email + SMS workers started')
 startEmailScheduler()
 startMessageScheduler()
 
+// Heartbeat — Settings → System Status shows "worker not running" when this goes stale,
+// so a stopped worker (no reminders) is visible instead of silent.
+async function heartbeat(): Promise<void> {
+  try {
+    await prisma.settings.updateMany({ data: { workerHeartbeatAt: new Date() } })
+  } catch (err) {
+    console.error('[worker] heartbeat failed:', (err as Error).message)
+  }
+}
+void heartbeat()
+const heartbeatTimer = setInterval(heartbeat, 60_000)
+
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`[worker] received ${signal} — shutting down gracefully...`)
+  clearInterval(heartbeatTimer)
   try {
     await Promise.all([emailWorker.close(), smsWorker.close()])
     await redisProbe.quit()

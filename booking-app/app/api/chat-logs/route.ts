@@ -10,6 +10,7 @@ import { auth } from "@/auth"
 export async function GET(request: NextRequest) {
   try {
     const session = await auth()
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = request.nextUrl
 
     const page  = Math.max(1, parseInt(searchParams.get("page")  ?? "1",  10))
@@ -105,6 +106,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await auth()
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const body = await request.json()
 
     const { sessionId, startTime } = body

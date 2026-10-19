@@ -594,7 +594,7 @@ function EditorPanel({
 
                   {c.type === "doctor" && (
                     <input
-                      type="text" value={c.doctor ?? ""} placeholder="e.g. Dr. Tamas"
+                      type="text" value={c.doctor ?? ""} placeholder="e.g. Dra. Ana Nunes"
                       onChange={e => updateCondition(c.id, { doctor: e.target.value })}
                       className="flex-1 text-xs border-0 bg-transparent focus:outline-none text-slate-700 dark:text-slate-300 placeholder:text-slate-400"
                     />

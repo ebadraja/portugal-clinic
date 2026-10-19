@@ -1151,7 +1151,7 @@ export default function EmailCampaignsPage() {
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Specific Doctor</label>
                     <Input
-                      placeholder="e.g. Dr. Tamas"
+                      placeholder="e.g. Dra. Ana Nunes"
                       value={audienceFilters.provider}
                       onChange={e => setAudienceFilters(f => ({ ...f, provider: e.target.value }))}
                     />

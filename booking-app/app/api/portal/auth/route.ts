@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
         where: { id: session.patientId },
         select: { dateOfBirth: true },
       })
-      if (!patient || !isSameDateOfBirth(patient.dateOfBirth, payload.dateOfBirth)) {
+      if (!patient?.dateOfBirth || !isSameDateOfBirth(patient.dateOfBirth, payload.dateOfBirth)) {
         return NextResponse.json({ error: 'Date of birth does not match our records' }, { status: 403 })
       }
 
@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
         where: { id: session.patientId },
         select: { dateOfBirth: true },
       })
-      if (!patient || !isSameDateOfBirth(patient.dateOfBirth, payload.dateOfBirth)) {
+      if (!patient?.dateOfBirth || !isSameDateOfBirth(patient.dateOfBirth, payload.dateOfBirth)) {
         return NextResponse.json({ error: 'Date of birth does not match our records' }, { status: 403 })
       }
 

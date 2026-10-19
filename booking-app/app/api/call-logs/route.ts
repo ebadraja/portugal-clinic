@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import prisma from "@/lib/prisma"
 import { auth } from "@/auth"
+import { toPublicCallLog, toPublicCallLogs } from "@/lib/voice/callLogPublic"
 
 // ── GET /api/call-logs ────────────────────────────────────────────────────────
 // Filters: search (transcript/callerName), intent, outcome, dateFrom, dateTo,
@@ -12,6 +13,7 @@ import { auth } from "@/auth"
 export async function GET(request: NextRequest) {
   try {
     const session = await auth()
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { searchParams } = request.nextUrl
 
     const page  = Math.max(1, parseInt(searchParams.get("page")  ?? "1",  10))
@@ -79,7 +81,7 @@ export async function GET(request: NextRequest) {
     }).catch(() => {})
 
     return NextResponse.json({
-      data: callLogs,
+      data: toPublicCallLogs(callLogs),
       pagination: {
         page,
         limit,
@@ -104,6 +106,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await auth()
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const body = await request.json()
 
     const { callerPhone, startTime } = body
@@ -181,7 +184,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(callLog, { status: 201 })
+    return NextResponse.json(toPublicCallLog(callLog), { status: 201 })
   } catch (error) {
     console.error("[POST /api/call-logs]", error)
     return NextResponse.json({ error: "Failed to create call log" }, { status: 500 })

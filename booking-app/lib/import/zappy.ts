@@ -551,6 +551,7 @@ export function guessType(service: string, category: string): AppointmentType | 
   if (any(s, 'endodon', 'desvital', 'root canal', 'canal')) return 'ENDODONTICS'
   if (any(s, 'extrac', 'extract', 'exodon', 'cirurg', 'surgery')) return 'SURGERY'
   if (any(s, 'restaur', 'obtura', 'filling', 'composit')) return 'RESTORATIVE'
+  if (any(s, 'protes', 'prosth', 'coroa', 'crown', 'ponte')) return 'PROCEDURE'
   if (any(s, 'ortodon', 'orthodon', 'aparelho', 'aligner', 'alinhador', 'device')) return any(c, 'orthodont', 'ortodont') || any(s, 'ortodon', 'orthodon', 'aligner', 'alinhador') ? 'ORTHODONTICS' : null
   if (any(s, 'consult')) return 'CONSULTATION'
   if (any(c, 'orthodont', 'ortodont')) return 'ORTHODONTICS'

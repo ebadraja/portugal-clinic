@@ -162,7 +162,8 @@ export function ZappyImportDialog({ open, onClose, onImported }: { open: boolean
     saveMapping(mapping)
     const sum: Record<string, number> = {}
     try {
-      for (let i = 1; i <= 40; i++) {
+      // Thousands of appointments take many ~45 s rounds; each round saves its work.
+      for (let i = 1; i <= 200; i++) {
         setRounds(i)
         const r = await send(true)
         for (const [k, v] of Object.entries(r.counts)) if (!k.endsWith(".unchanged")) sum[k] = (sum[k] ?? 0) + v

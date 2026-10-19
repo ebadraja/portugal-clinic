@@ -65,9 +65,8 @@ export async function POST(req: NextRequest) {
     })
 
     const problems: ReportRow[] = r.report.filter((row) => PROBLEM_ACTIONS.has(row.action) || WARNING_RE.test(row.detail))
-    // The full row-by-row report only for the preview (it is what people check); commits return counts.
-    const report = commit ? [] : r.report.filter((row) => row.action !== "unchanged")
-    return NextResponse.json({ ...r, report, problems: problems.slice(0, 2000), problemCount: problems.length })
+    // Only the rows people need to look at go back (a full report of thousands of appointments is megabytes).
+    return NextResponse.json({ ...r, report: [], problems: problems.slice(0, 2000), problemCount: problems.length })
   } catch (error) {
     if (error instanceof ImportError || error instanceof SyntaxError) {
       return NextResponse.json({ error: error.message }, { status: 400 })

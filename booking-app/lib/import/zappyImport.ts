@@ -120,7 +120,14 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
   const nameSinceKey = (name: string, since: Date | null) => (since ? `${norm(name)}|${since.toISOString()}` : null)
   const byNif = new Map<string, P>()
   const byPhone = new Map<string, P[]>()
+  /** Normalised full name → records (bookings without a client nº are matched by name). */
+  const byName = new Map<string, P[]>()
   const index = (p: P) => {
+    const nk = norm(`${p.firstName} ${p.lastName}`)
+    if (nk) {
+      const list = byName.get(nk) ?? []
+      if (!list.some((x) => x.id === p.id)) byName.set(nk, [...list, p])
+    }
     if (p.externalId) byExternal.set(p.externalId, p)
     else {
       const k = nameSinceKey(`${p.firstName} ${p.lastName}`, p.patientSince)
@@ -313,7 +320,20 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
     const serviceGuess = new Map<string, string | null>()
     const staffGuess = new Map<string, string | null>()
 
-    for (const { file, rowNo, rec, cols, order, fileIndex } of rows) {
+    // Zappy lists a slot twice when a patient cancels and rebooks it (and overlapping exports repeat
+    // rows): per client + date/time + service keep one row, preferring the one that is not cancelled.
+    const slotKey = (r: (typeof rows)[number]) =>
+      `${pick(r.rec, r.cols, 'clientId') || norm(pick(r.rec, r.cols, 'clientName'))}|${pick(r.rec, r.cols, 'date')}|${pick(r.rec, r.cols, 'start')}|${norm(pick(r.rec, r.cols, 'service'))}`
+    const isCancelledRow = (r: (typeof rows)[number]) => /cancel|desmarc|anulad|eliminad/.test(norm(pick(r.rec, r.cols, 'status')))
+    const keep = new Map<string, number>()
+    rows.forEach((r, i) => {
+      const k = slotKey(r)
+      const cur = keep.get(k)
+      if (cur === undefined || (isCancelledRow(rows[cur]) && !isCancelledRow(r))) keep.set(k, i)
+    })
+
+    for (const [ri, row] of rows.entries()) {
+      const { file, rowNo, rec, cols, order, fileIndex } = row
       if (outOfTime()) {
         result.complete = false
         return finish()
@@ -333,6 +353,11 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
       if (isPersonalTime(statusRaw)) {
         bump('bookings.personalTime')
         note({ ...base, action: 'skip', detail: 'personal time in Zappy — use Block time in the agenda' })
+        continue
+      }
+      if (keep.get(slotKey(row)) !== ri) {
+        bump('bookings.duplicateRow')
+        note({ ...base, action: 'skip', detail: 'same slot listed again (rebooked after cancelling, or in two exports) — the live booking is kept' })
         continue
       }
       const service = pick(rec, cols, 'service')
@@ -373,9 +398,9 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
       let patient: P | undefined = zcid ? byExternal.get(`zappy:${zcid}`) : undefined
       if (!patient && phone) patient = (byPhone.get(phoneKey(phone)!) ?? []).find((p) => sameName(p, nm))
       if (!patient && clientName) {
-        const sameFull = [...byExternal.values(), ...existing].filter((p) => norm(`${p.firstName} ${p.lastName}`) === norm(clientName))
-        const unique = [...new Map(sameFull.map((p) => [p.id, p])).values()]
-        if (unique.length === 1) patient = unique[0]
+        // Only an unambiguous name: two patients called the same are never guessed between.
+        const same = byName.get(norm(clientName)) ?? []
+        if (same.length === 1) patient = same[0]
       }
       if (!patient) {
         if (!clientName) {

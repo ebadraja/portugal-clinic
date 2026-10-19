@@ -690,6 +690,7 @@ async function main() {
       const f3 = '2027-03-25'
       const helenaRow = { date: en(f1, '10:00 AM'), status: 'Confirmed', client_name: 'Helena Duarte', client_internal_nr: '601', item_name: 'A1.01.01.02: Dental consultation', online: '0', category: 'Consultation', service_provider: 'ANA NUNES', notes: 'Traz exames' }
       const fileA = [MH.join('\t'),
+        mrow({ ...helenaRow, status: 'Cancelled', notes: '' }), // cancelled, then rebooked in the same slot
         mrow(helenaRow),
         mrow({ date: en('2026-03-10', '5:00 PM'), status: 'Missing (unpaid bookings)', client_name: 'Rita Ferreira', client_internal_nr: '501', item_name: 'Device Control', category: 'Orthodontics', service_provider: 'TELMO - TRAINING' }),
         mrow({ date: en(f1, '1:00 PM'), status: 'Personal time', client_name: '', service_provider: 'ANA NUNES' }),
@@ -713,7 +714,7 @@ async function main() {
       const mp = await markUp(false)
       const c = mp.data?.counts ?? {}
       check('MARKINGS preview: 2 files, columns recognised, 3 bookings to create', mp.status === 200 && mp.data.bookings?.files === 2 && mp.data.bookings?.columns?.staff === 'service_provider' && c['bookings.created'] === 3, JSON.stringify({ status: mp.status, bookings: mp.data?.bookings, c }).slice(0, 400))
-      check('…personal time, the ALERTS column and the overlapping row are left out; the waiting list is recognised', c['bookings.personalTime'] === 1 && c['bookings.skippedStaff'] === 1 && c['bookings.duplicateRow'] === 1 && c['bookings.waitlist'] === 1, JSON.stringify(c))
+      check('…personal time, the ALERTS column, the overlapping row and the cancelled-then-rebooked copy are left out; the waiting list is recognised', c['bookings.personalTime'] === 1 && c['bookings.skippedStaff'] === 1 && c['bookings.duplicateRow'] === 2 && c['bookings.waitlist'] === 1, JSON.stringify(c))
       check('…guesses types and the dentist from the names', mp.data.unknownServices?.find((x) => x.name === 'A1.01.01.02: Dental consultation')?.guess === 'CONSULTATION' && mp.data.unknownStaff?.find((x) => x.name === 'ANA NUNES')?.guess === 'ana-nunes', JSON.stringify({ s: mp.data.unknownServices, st: mp.data.unknownStaff }).slice(0, 300))
       const mc = await markUp(true)
       const appts = (await db.query("select p.external_id as nr, a.status, a.type, a.provider_id, a.notes, to_char((a.start_time at time zone 'UTC') at time zone 'Europe/Lisbon','YYYY-MM-DD HH24:MI') as at from appointments a join patients p on p.id=a.patient_id where a.external_id like 'zappy:h:%' and p.external_id in ('zappy:601','zappy:501') order by a.start_time")).rows

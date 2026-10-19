@@ -107,15 +107,22 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
       id: true, firstName: true, lastName: true, phone: true, phone2: true, email: true, nif: true, externalId: true, dateOfBirth: true,
       birthDay: true, birthMonth: true, address: true, city: true, zipCode: true, gender: true, clientSource: true, referredBy: true,
       invoiceName: true, invoiceNotes: true, phoneNote: true, phone2Note: true, tags: true, lastVisitAt: true,
-      smsRemindersEnabled: true, emailRemindersEnabled: true, consents: true,
+      smsRemindersEnabled: true, emailRemindersEnabled: true, consents: true, patientSince: true,
     },
   })
   type P = (typeof existing)[number]
   const byExternal = new Map<string, P>()
+  /** Records imported before keyless clients got a stable id: name + Zappy creation time. */
+  const byNameSince = new Map<string, P>()
+  const nameSinceKey = (name: string, since: Date | null) => (since ? `${norm(name)}|${since.toISOString()}` : null)
   const byNif = new Map<string, P>()
   const byPhone = new Map<string, P[]>()
   const index = (p: P) => {
     if (p.externalId) byExternal.set(p.externalId, p)
+    else {
+      const k = nameSinceKey(`${p.firstName} ${p.lastName}`, p.patientSince)
+      if (k) byNameSince.set(k, p)
+    }
     if (p.nif) byNif.set(p.nif.replace(/\D/g, ''), p)
     for (const ph of [p.phone, p.phone2]) {
       const k = phoneKey(ph)
@@ -154,9 +161,13 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
       const base = { file: 'clients', row: rowNo, entity: 'patient', externalId: externalId ?? '', name: display }
       const { patientSince, lastVisitAt, consents, ...fields } = data
 
-      // Match: Zappy id → NIF → phone + name
+      // Match: Zappy id → name + Zappy creation time (records without a key yet) → NIF → phone + name
       let match: P | undefined = externalId ? byExternal.get(externalId) : undefined
       let how = 'zappy id'
+      if (!match) {
+        const k = nameSinceKey(display, patientSince)
+        if (k) { match = byNameSince.get(k); how = 'name + Zappy creation date' }
+      }
       if (!match && data.nif) { match = byNif.get(data.nif); how = 'NIF' }
       if (!match && data.phone) { match = (byPhone.get(phoneKey(data.phone)!) ?? []).find((p) => sameName(p, data)); how = 'phone + name' }
 
@@ -171,8 +182,11 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
       let firstLink = false
       if (match) {
         // Zappy is the source of truth for records it created; CRM-made records only get gaps filled.
-        const fromZappy = match.externalId === externalId && !!externalId
-        firstLink = !match.externalId
+        // Matched by name + creation time = a record an earlier import created from this same
+        // Zappy client (before it had a key): same record, its notes/follow-ups already exist.
+        const sameZappyRecord = how === 'name + Zappy creation date'
+        const fromZappy = (match.externalId === externalId && !!externalId) || sameZappyRecord
+        firstLink = !match.externalId && !sameZappyRecord
         const patch: Prisma.PatientUpdateInput = {}
         // Key order doesn't matter (Postgres JSONB reorders object keys).
         const stable = (v: unknown): string =>
@@ -203,6 +217,8 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
         if (!match.externalId && externalId) {
           match.externalId = externalId
           byExternal.set(externalId, match)
+          const k = nameSinceKey(`${match.firstName} ${match.lastName}`, match.patientSince)
+          if (k) byNameSince.delete(k)
         }
         patientId = match.id
       } else {
@@ -223,7 +239,7 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
           })
           patientId = created.id
         }
-        index({ id: patientId, ...fields, externalId, lastVisitAt } as unknown as P)
+        index({ id: patientId, ...fields, externalId, lastVisitAt, patientSince } as unknown as P)
         firstLink = true
       }
       if (m.nextAppointment) nextFromClients.push({ patientId, name: display, externalId: externalId ?? '', date: m.nextAppointment.date, time: m.nextAppointment.time })

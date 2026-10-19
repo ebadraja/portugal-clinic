@@ -98,6 +98,11 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
       if (!(field in body)) continue
 
       if (field === "dateOfBirth") {
+        // Clearing the date stores "unknown" — never 1 Jan 1970 (new Date(null)).
+        if (body.dateOfBirth === null || body.dateOfBirth === "") {
+          data.dateOfBirth = null
+          continue
+        }
         const parsed = new Date(body.dateOfBirth)
         if (isNaN(parsed.getTime())) {
           return NextResponse.json({ error: "Invalid dateOfBirth value" }, { status: 400 })

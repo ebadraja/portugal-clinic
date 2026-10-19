@@ -6,6 +6,7 @@
  * found through a list of aliases (accent- and case-insensitive). The mapping file
  * (scripts/zappy-map.json) translates Zappy services and staff into CRM types and dentists.
  */
+import { createHash } from 'node:crypto'
 import type { AppointmentStatus, AppointmentType } from '@/lib/generated/prisma/client'
 import { toE164 } from '@/lib/clinic/phone'
 
@@ -301,6 +302,17 @@ export type MappedClient = {
 
 type ClientCols = ColumnMap<typeof CLIENT_COLUMNS>
 
+/**
+ * Stable id of a Zappy client. Zappy's "Nº" is optional (many clinics leave it blank), so
+ * without it the key is the name + Zappy's creation time — which never changes for a record,
+ * so uploading the same export again updates instead of duplicating.
+ */
+export function clientKey(nr: string, fullName: string, createdOn: string): string | null {
+  if (nr.trim()) return `zappy:${nr.trim()}`
+  if (!createdOn.trim() || !norm(fullName)) return null
+  return `zappy:c:${createHash('sha1').update(`${norm(fullName)}|${createdOn.trim()}`).digest('hex').slice(0, 16)}`
+}
+
 function dateOnly(raw: string): Date | null {
   const d = parseDate(raw)
   return d ? new Date(`${d.date}T${d.time ?? '00:00'}:00Z`) : null
@@ -405,7 +417,7 @@ export function mapClientRow(rec: Record<string, string>, cols: ClientCols, toda
 
   const next = parseDate(get('nextAppointment'))
   return {
-    externalId: get('id') ? `zappy:${get('id')}` : null,
+    externalId: clientKey(get('id'), `${firstName} ${lastName}`, get('createdOn')),
     patient: {
       firstName,
       lastName,

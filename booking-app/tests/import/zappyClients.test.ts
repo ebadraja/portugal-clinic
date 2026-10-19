@@ -160,3 +160,23 @@ describe('helpers', () => {
     expect(clinicalAlerts({ tags: ['VIP', 'DIARIO CLINICO'] })).toEqual([])
   })
 })
+
+describe('clients without a Zappy Nº', () => {
+  it('get a stable key from name + Zappy creation time, so re-uploads never duplicate them', () => {
+    const r1 = ok(mapClientRow(row({ name: 'Adelino', createdon: '2021-03-04 10:00' }), cols, TODAY))
+    const r2 = ok(mapClientRow(row({ name: 'ADELINO', createdon: '2021-03-04 10:00', mobile: '912 000 000' }), cols, TODAY))
+    expect(r1.externalId).toMatch(/^zappy:c:[0-9a-f]{16}$/)
+    expect(r2.externalId).toBe(r1.externalId) // case and other fields don't change the key
+  })
+
+  it('different creation time → different person', () => {
+    const a = ok(mapClientRow(row({ name: 'Ana Silva', createdon: '2021-03-04 10:00' }), cols, TODAY))
+    const b = ok(mapClientRow(row({ name: 'Ana Silva', createdon: '2022-01-01 09:00' }), cols, TODAY))
+    expect(a.externalId).not.toBe(b.externalId)
+  })
+
+  it('the real Nº always wins; no Nº and no creation date → no key (matched by NIF/phone instead)', () => {
+    expect(ok(mapClientRow(row({ nr: '77', name: 'Ana Silva', createdon: '2021-03-04 10:00' }), cols, TODAY)).externalId).toBe('zappy:77')
+    expect(ok(mapClientRow(row({ name: 'Ana Silva' }), cols, TODAY)).externalId).toBe(null)
+  })
+})

@@ -7,14 +7,19 @@ import type { Prisma } from '@/lib/generated/prisma/client'
 import { digitsOnly } from '@/lib/clinic/phone'
 import { LOST_AFTER_MONTHS, NEW_WITHIN_DAYS, birthdayOf, clinicalAlerts, lifecycleOf, type Lifecycle } from '@/lib/patients/alerts'
 
+/** "seen12" = seen in the last 12 months (or has something booked). */
+export type DirectoryLifecycle = Lifecycle | 'seen12'
+
 export type DirectoryQuery = {
   q?: string
-  lifecycle?: Lifecycle | null
+  lifecycle?: DirectoryLifecycle | null
   tag?: string | null
   /** Last visit older than the recall interval and nothing booked. */
   recallDue?: boolean
   upcoming?: 'yes' | 'no' | null
   missing?: 'dob' | 'phone' | 'email' | null
+  /** Restrict to these ids (resolved from SQL-only checks: names to check, possible duplicates). */
+  ids?: string[] | null
   providerName?: string | null
   sort?: 'name' | 'lastVisit' | 'created'
   page?: number
@@ -66,7 +71,11 @@ export function directoryWhere(q: DirectoryQuery, opts: { now: Date; recallMonth
     case 'potential':
       and.push({ patientSince: { lt: newSince } }, upcomingNone, { lastVisitAt: null })
       break
+    case 'seen12':
+      and.push({ OR: [upcomingSome, { lastVisitAt: { gte: monthsAgo(12, now) } }] })
+      break
   }
+  if (q.ids) and.push({ id: { in: q.ids } })
   if (q.tag) and.push({ tags: { has: q.tag } })
   if (q.recallDue) and.push(upcomingNone, { lastVisitAt: { lt: monthsAgo(opts.recallMonths, now) } })
   if (q.upcoming === 'yes') and.push(upcomingSome)
@@ -76,6 +85,31 @@ export function directoryWhere(q: DirectoryQuery, opts: { now: Date; recallMonth
   if (q.missing === 'email') and.push({ email: null })
   if (q.providerName) and.push({ preferredProvider: { equals: q.providerName, mode: 'insensitive' } })
   return { AND: and }
+}
+
+/** Records whose name needs a look: no surname, or a "name" that is digits / punctuation. */
+export async function idsWithNameToCheck(limit = 2000): Promise<string[]> {
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id FROM patients
+     WHERE status NOT IN ('DRAFT', 'ARCHIVED')
+       AND (coalesce(trim(last_name), '') = '' OR first_name ~ '^[0-9 +?.,_-]*$')
+     LIMIT ${limit}`
+  return rows.map((r) => r.id)
+}
+
+/** Records that share a phone (last 9 digits) or a NIF with another record. */
+export async function idsPossibleDuplicates(limit = 2000): Promise<string[]> {
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    WITH active AS (
+      SELECT id, nif, right(regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g'), 9) AS pk
+        FROM patients WHERE status NOT IN ('DRAFT', 'ARCHIVED')
+    ),
+    dup_phone AS (SELECT pk FROM active WHERE length(pk) = 9 GROUP BY pk HAVING count(*) > 1),
+    dup_nif AS (SELECT nif FROM active WHERE nif IS NOT NULL AND nif <> '' GROUP BY nif HAVING count(*) > 1)
+    SELECT id FROM active
+     WHERE pk IN (SELECT pk FROM dup_phone) OR nif IN (SELECT nif FROM dup_nif)
+     LIMIT ${limit}`
+  return rows.map((r) => r.id)
 }
 
 function orderBy(sort: DirectoryQuery['sort']): Prisma.PatientOrderByWithRelationInput[] {
@@ -89,7 +123,7 @@ function orderBy(sort: DirectoryQuery['sort']): Prisma.PatientOrderByWithRelatio
 export async function listDirectory(q: DirectoryQuery, opts: { now?: Date; recallMonths: number; timeZone: string }) {
   const now = opts.now ?? new Date()
   const where = directoryWhere(q, { now, recallMonths: opts.recallMonths })
-  const limit = Math.min(100, Math.max(1, q.limit ?? 25))
+  const limit = Math.min(100, Math.max(1, q.limit ?? 50))
   const page = Math.max(1, q.page ?? 1)
   const [rows, total] = await Promise.all([
     prisma.patient.findMany({
@@ -121,6 +155,8 @@ export async function listDirectory(q: DirectoryQuery, opts: { now?: Date; recal
     return {
       id: p.id,
       name: `${p.firstName} ${p.lastName}`.trim(),
+      firstName: p.firstName,
+      lastName: p.lastName,
       phone: p.phone ?? p.phone2,
       email: p.email,
       nif: p.nif,
@@ -155,9 +191,13 @@ export async function tagCounts(limit = 60): Promise<{ tag: string; count: numbe
 export async function directoryCounts(opts: { now?: Date; recallMonths: number }) {
   const now = opts.now ?? new Date()
   const count = (q: DirectoryQuery) => prisma.patient.count({ where: directoryWhere(q, { now, recallMonths: opts.recallMonths }) })
-  const [all, active, lost, potential, fresh, recall, missingDob, missingPhone] = await Promise.all([
-    count({}), count({ lifecycle: 'active' }), count({ lifecycle: 'lost' }), count({ lifecycle: 'potential' }), count({ lifecycle: 'new' }),
+  const [nameIds, dupIds] = await Promise.all([idsWithNameToCheck(), idsPossibleDuplicates()])
+  const [all, active, seen12, lost, potential, fresh, recall, missingDob, missingPhone] = await Promise.all([
+    count({}), count({ lifecycle: 'active' }), count({ lifecycle: 'seen12' }), count({ lifecycle: 'lost' }), count({ lifecycle: 'potential' }), count({ lifecycle: 'new' }),
     count({ recallDue: true }), count({ missing: 'dob' }), count({ missing: 'phone' }),
   ])
-  return { all, active, lost, potential, new: fresh, recallDue: recall, missingDob, missingPhone }
+  return {
+    all, active, seen12, lost, potential, new: fresh, recallDue: recall, missingDob, missingPhone,
+    nameToCheck: nameIds.length, possibleDuplicates: dupIds.length,
+  }
 }

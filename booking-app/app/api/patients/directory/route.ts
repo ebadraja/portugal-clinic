@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireStaff } from "@/lib/auth/guards"
 import { getClinicSettings } from "@/lib/clinic/settings"
-import { listDirectory, type DirectoryQuery } from "@/lib/patients/directory"
+import { idsPossibleDuplicates, idsWithNameToCheck, listDirectory, type DirectoryQuery } from "@/lib/patients/directory"
 
 export const dynamic = "force-dynamic"
 
-const LIFECYCLES = ["new", "active", "lost", "potential"] as const
+const LIFECYCLES = ["new", "active", "lost", "potential", "seen12"] as const
 
 // ── GET /api/patients/directory ───────────────────────────────────────────────
-// ?q=&lifecycle=new|active|lost|potential&tag=&recall=1&upcoming=yes|no&missing=dob|phone|email
+// ?q=&lifecycle=new|active|lost|potential|seen12&tag=&recall=1&upcoming=yes|no&missing=dob|phone|email
+//  &check=name|duplicates (needs-attention lists)
 //  &provider=&sort=name|lastVisit|created&page=&limit=
 
 export async function GET(request: NextRequest) {
@@ -26,9 +27,13 @@ export async function GET(request: NextRequest) {
     providerName: sp.get("provider")?.slice(0, 80) || null,
     sort: pickOne(sp.get("sort"), ["name", "lastVisit", "created"] as const) ?? "name",
     page: parseInt(sp.get("page") ?? "1", 10) || 1,
-    limit: parseInt(sp.get("limit") ?? "25", 10) || 25,
+    limit: parseInt(sp.get("limit") ?? "50", 10) || 50,
   }
   try {
+    const check = sp.get("check")
+    if (check === "name") query.ids = await idsWithNameToCheck()
+    if (check === "duplicates") query.ids = await idsPossibleDuplicates()
+    if (check === "duplicates" && !sp.get("sort")) query.sort = "name"
     const settings = await getClinicSettings()
     return NextResponse.json(await listDirectory(query, { recallMonths: settings.bookingPolicy.recallMonths, timeZone: settings.timezone }))
   } catch (error) {

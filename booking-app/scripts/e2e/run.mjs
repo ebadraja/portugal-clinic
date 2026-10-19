@@ -588,6 +588,55 @@ async function main() {
     check('a mapping to an unknown dentist is refused (400)', badMap.status === 400 && /unknown dentist/.test(badMap.data.error), JSON.stringify(badMap.data))
     const helenaDir = await admin.json('/api/patients/directory?q=helena')
     check('imported patient appears in the directory with her clinical alert', helenaDir.data.data?.[0]?.alerts?.includes('Anticoagulated'), JSON.stringify(helenaDir.data.data?.[0]))
+
+    // Clients without a Zappy Nº: stable key, so re-uploads never duplicate them
+    const noNr = '\uFEFF' + ZH.join(';') + '\r\n' + zrow({ name: 'Sofia Keyless', mobile: '965 000 333', createdon: '2022-05-06 11:30', obs_1: 'Nota única' }) + '\r\n'
+    await upload(admin, { clients: noNr }, { commit: '1' })
+    await upload(admin, { clients: noNr }, { commit: '1' })
+    const sofia = (await db.query("select count(*)::int as n, min(external_id) as ext from patients where first_name='Sofia' and last_name='Keyless'")).rows[0]
+    check('client without Nº uploaded twice → one record with a stable key', sofia.n === 1 && /^zappy:c:/.test(sofia.ext), JSON.stringify(sofia))
+    const sofiaNotes = (await db.query("select count(*)::int as n from patient_notes n join patients p on p.id=n.patient_id where p.first_name='Sofia' and p.last_name='Keyless'")).rows[0].n
+    check('…and its note is not duplicated', sofiaNotes === 1, String(sofiaNotes))
+    // A record imported before keys existed (no external_id) is linked, not duplicated, and gets no second copy of its notes
+    await db.query("insert into patients (id, first_name, last_name, patient_since, updated_at) values ('itest-legacy-keyless', 'Legacy', 'Keyless', '2021-03-04 10:00:00', now())")
+    await db.query("insert into patient_notes (id, patient_id, author_id, content, note_type, updated_at) select 'itest-legacy-note', 'itest-legacy-keyless', id, 'Importado do Zappy: nota antiga', 'ADMINISTRATIVE', now() from users where role='ADMIN' limit 1")
+    const legacyCsv = '\uFEFF' + ZH.join(';') + '\r\n' + zrow({ name: 'Legacy Keyless', mobile: '966 000 444', createdon: '2021-03-04 10:00', obs_1: 'nota antiga' }) + '\r\n'
+    const legacyUp = await upload(admin, { clients: legacyCsv }, { commit: '1' })
+    const legacyRec = (await db.query("select count(*)::int as n, max(external_id) as ext, max(phone) as phone from patients where first_name='Legacy' and last_name='Keyless'")).rows[0]
+    check('keyless record from an earlier import is linked by name + Zappy creation date', legacyUp.data.counts?.['clients.updated'] === 1 && legacyRec.n === 1 && /^zappy:c:/.test(legacyRec.ext) && legacyRec.phone === '+351966000444', JSON.stringify({ counts: legacyUp.data.counts, legacyRec }))
+    const legacyNotes = (await db.query("select count(*)::int as n from patient_notes where patient_id='itest-legacy-keyless'")).rows[0].n
+    check('…without copying its notes again', legacyNotes === 1, String(legacyNotes))
+
+    // Patient list views
+    await db.query("insert into patients (id, first_name, last_name, phone, updated_at) values ('itest-no-surname', 'Adelino', '', '+351967000555', now())")
+    const dupApi = await admin.json('/api/patients', { method: 'POST', body: { firstName: 'Rita', lastName: 'Ferreira Duplicada', phone: '912 333 444', dateOfBirth: '1985-03-12' } })
+    const seen12 = await admin.json('/api/patients/directory?lifecycle=seen12&limit=100')
+    check('"Seen in the last 12 months" view responds', seen12.status === 200 && Array.isArray(seen12.data.data), String(seen12.status))
+    const nameCheck = await admin.json('/api/patients/directory?check=name&limit=100')
+    check('"Names to check" lists a record without surname', nameCheck.data.data?.some((p) => p.id === 'itest-no-surname'), JSON.stringify(nameCheck.data.data?.map((p) => p.name)))
+    const dups = await admin.json('/api/patients/directory?check=duplicates&limit=100')
+    check('"Possible duplicates" pairs records sharing a phone', dupApi.status === 201 && dups.data.data?.filter((p) => (p.phone ?? '').replace(/[^0-9]/g, '').endsWith('912333444')).length >= 2, JSON.stringify(dups.data.data?.map((p) => [p.name, p.phone])))
+    const sum2 = await admin.json('/api/patients/directory/summary')
+    check('summary has counts for the new views', sum2.data.counts.seen12 >= 0 && sum2.data.counts.nameToCheck >= 1 && sum2.data.counts.possibleDuplicates >= 2, JSON.stringify(sum2.data.counts))
+
+    // Notes are real now
+    const noteAdd = await admin.json(`/api/patients/${rz.id}/notes`, { method: 'POST', body: { content: 'Prefere consultas ao fim do dia', noteType: 'GENERAL' } })
+    check('add a note (201)', noteAdd.status === 201 && noteAdd.data.content === 'Prefere consultas ao fim do dia', JSON.stringify(noteAdd.data).slice(0, 200))
+    const rec = await admin.json(`/api/patients/${rz.id}`)
+    check('the record returns notes with their text', rec.data.notes?.some((n) => n.content === 'Prefere consultas ao fim do dia'))
+    const emptyNote = await admin.json(`/api/patients/${rz.id}/notes`, { method: 'POST', body: { content: '   ' } })
+    check('an empty note is refused (400)', emptyNote.status === 400)
+    const noteDel = await admin.json(`/api/patients/${rz.id}/notes/${noteAdd.data.id}`, { method: 'DELETE' })
+    check('delete a note', noteDel.status === 200 && !(await admin.json(`/api/patients/${rz.id}`)).data.notes?.some((n) => n.id === noteAdd.data.id))
+
+    // Clearing a date of birth stores "unknown", never 1 Jan 1970
+    const cleared = await admin.json(`/api/patients/${rz.id}`, { method: 'PUT', body: { dateOfBirth: null } })
+    check('clearing the date of birth stores null (not 1970)', cleared.status === 200 && cleared.data.dateOfBirth === null, String(cleared.data?.dateOfBirth))
+    await admin.json(`/api/patients/${rz.id}`, { method: 'PUT', body: { dateOfBirth: '1985-03-12' } })
+    for (const pg of [`/patients/${rz.id}?tab=details`, `/patients/${rz.id}?tab=notes`, '/patients?x=1']) {
+      const res = await admin.req(pg)
+      check(`${pg} renders (200)`, res.status === 200, String(res.status))
+    }
     const ag2 = await admin.json(`/api/agenda?from=${future}&to=${future}`)
     check('imported bookings show in the agenda', ag2.data.appointments?.filter((a) => a.bookedVia === 'IMPORT').length === 2, String(ag2.data.appointments?.length))
   }

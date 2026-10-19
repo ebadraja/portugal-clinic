@@ -79,6 +79,24 @@ uses, or is deliberately dropped:
 | `next_appointment_date` | Checked against imported bookings. With `--create-next-from-clients`, creates the appointment when Zappy's booking list wasn't exported | Agenda |
 | `online` | dropped | (My Zappy app account) |
 
+## Zappy appointment export → CRM (real columns, 20 Oct)
+
+Zappy: **reports → MARKINGS**, FILTER **ALL MARKINGS**, category and contributor **All**, SEARCH → EXPORT.
+Zappy refuses ranges over **3 months**, so the history comes as several files; the upload takes them
+all at once (overlaps are fine) and re-uploading only applies changes.
+
+| Zappy column | CRM | Notes |
+|---|---|---|
+| `date` | start (clinic time) | English back office writes "October 20, 2026 5:00 PM"; numeric dates are read day-first unless the file can only be month-first |
+| `status` | status | Confirmed → CONFIRMED · Awaiting … confirmation → SCHEDULED · It arrived / Paid → COMPLETED · Missing (paid/unpaid) → NO_SHOW · Cancelled → CANCELLED · Waiting list → CRM waiting list (upcoming only) · Personal time → not imported (Block time) |
+| `client_name`, `client_internal_nr` | patient (`zappy:<nr>`, same key as the clients export) | Unknown nr → minimal patient created |
+| `item_name`, `category` | type | Mapping in the dialog; unknown services get a type guessed from name + category |
+| `service_provider` | dentist | Matched by name to Settings → Dentists; columns like ALERTS/SUPPORT can be set to "Don't import" |
+| `notes`, `Obs.3`, `cancel_reason` | notes / cancel reason | |
+| `payment_date` | a past booking with a payment date is COMPLETED (not "inferred") | Prices, discounts and coupons are not imported (invoicing stays outside the CRM) |
+| — | no booking id in the export | Stable key `zappy:h:<hash of patient, date, time, service>`; a booking moved in Zappy shows up as new + "no longer in Zappy" (tick "Cancel …" in the preview) |
+| — | no duration in the export | The CRM type's default duration |
+
 ---
 
 ## 1. What Zappy is, and which parts this clinic needs

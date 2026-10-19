@@ -678,6 +678,57 @@ async function main() {
     const due2 = await admin.json('/api/patients/directory?recall=1&limit=100')
     const callNote = (await db.query("select count(*)::int as n from patient_notes where patient_id=$1 and note_type='FOLLOW_UP' and content like 'Check-up call: no answer%'", [other.id])).rows[0].n
     check('logging "no answer" hides them for a week and notes it on the record', logged.status === 200 && !due2.data.data?.some((p) => p.id === other.id) && callNote === 1, JSON.stringify({ logged: logged.data, callNote }))
+    // Zappy reports → MARKINGS export (real header; 3 months per file, several files in one upload)
+    {
+      const MH = ['date', 'status', 'client_name', 'client_internal_nr', 'item_name', 'online', 'category', 'service_provider', 'price_base', 'discount', 'price_final', 'payment_date', 'cupao_id', 'updated_on', 'notes', 'Obs.3', 'cancel_reason']
+      const mrow = (v) => MH.map((h) => v[h] ?? '').join('\t')
+      const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+      const en = (iso, t) => `${MONTH[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}, ${iso.slice(0, 4)} ${t}`
+      const us = (iso, t) => `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)} ${t}`
+      const f1 = nextWeekday(30)
+      const f2 = nextWeekday(33)
+      const f3 = '2027-03-25'
+      const helenaRow = { date: en(f1, '10:00 AM'), status: 'Confirmed', client_name: 'Helena Duarte', client_internal_nr: '601', item_name: 'A1.01.01.02: Dental consultation', online: '0', category: 'Consultation', service_provider: 'ANA NUNES', notes: 'Traz exames' }
+      const fileA = [MH.join('\t'),
+        mrow(helenaRow),
+        mrow({ date: en('2026-03-10', '5:00 PM'), status: 'Missing (unpaid bookings)', client_name: 'Rita Ferreira', client_internal_nr: '501', item_name: 'Device Control', category: 'Orthodontics', service_provider: 'TELMO - TRAINING' }),
+        mrow({ date: en(f1, '1:00 PM'), status: 'Personal time', client_name: '', service_provider: 'ANA NUNES' }),
+        mrow({ date: en(f1, '12:00 PM'), status: 'Confirmed', client_name: 'ALERTS MATERIAL AND LABORATORY WORK', client_internal_nr: '9001', item_name: 'Device Control', service_provider: 'ALERTS', notes: 'JACINTO REGO' }),
+        mrow({ date: en(f2, '9:00 AM'), status: 'Appointments on a waiting list', client_name: 'Rita Ferreira', client_internal_nr: '501', item_name: 'Device Control', category: 'Orthodontics', service_provider: 'ANA NUNES' }),
+      ].join('\r\n') + '\r\n'
+      // Second export overlaps the first (same Helena booking) and writes US dates
+      const fileB = [MH.join('\t'),
+        mrow({ ...helenaRow, date: us(f1, '10:00 AM') }),
+        mrow({ date: us(f3, '4:30 PM'), status: 'Awaiting customer confirmation', client_name: 'Helena Duarte', client_internal_nr: '601', item_name: 'First consultation', category: 'Generic', service_provider: 'ANA NUNES' }),
+      ].join('\r\n') + '\r\n'
+      const markUp = async (commit) => {
+        const fd = new FormData()
+        fd.append('bookings', new Blob([fileA], { type: 'text/csv' }), 'zappy-q1.csv')
+        fd.append('bookings', new Blob([fileB], { type: 'text/csv' }), 'zappy-q2.csv')
+        fd.append('map', JSON.stringify({ services: {}, staff: { ALERTS: '__skip' }, defaultType: 'OTHER', defaultProviderId: null }))
+        if (commit) fd.append('commit', '1')
+        const res = await fetch(BASE + '/api/patients/import/zappy', { method: 'POST', body: fd, headers: { cookie: admin.header() }, redirect: 'manual' })
+        return { status: res.status, data: await res.json().catch(() => null) }
+      }
+      const mp = await markUp(false)
+      const c = mp.data?.counts ?? {}
+      check('MARKINGS preview: 2 files, columns recognised, 3 bookings to create', mp.status === 200 && mp.data.bookings?.files === 2 && mp.data.bookings?.columns?.staff === 'service_provider' && c['bookings.created'] === 3, JSON.stringify({ status: mp.status, bookings: mp.data?.bookings, c }).slice(0, 400))
+      check('…personal time, the ALERTS column and the overlapping row are left out; the waiting list is recognised', c['bookings.personalTime'] === 1 && c['bookings.skippedStaff'] === 1 && c['bookings.duplicateRow'] === 1 && c['bookings.waitlist'] === 1, JSON.stringify(c))
+      check('…guesses types and the dentist from the names', mp.data.unknownServices?.find((x) => x.name === 'A1.01.01.02: Dental consultation')?.guess === 'CONSULTATION' && mp.data.unknownStaff?.find((x) => x.name === 'ANA NUNES')?.guess === 'ana-nunes', JSON.stringify({ s: mp.data.unknownServices, st: mp.data.unknownStaff }).slice(0, 300))
+      const mc = await markUp(true)
+      const appts = (await db.query("select p.external_id as nr, a.status, a.type, a.provider_id, a.notes, to_char((a.start_time at time zone 'UTC') at time zone 'Europe/Lisbon','YYYY-MM-DD HH24:MI') as at from appointments a join patients p on p.id=a.patient_id where a.external_id like 'zappy:h:%' and p.external_id in ('zappy:601','zappy:501') order by a.start_time")).rows
+      const conf = appts.find((a) => a.nr === 'zappy:601' && a.at === `${f1} 10:00`)
+      const awaiting = appts.find((a) => a.nr === 'zappy:601' && a.at === `${f3} 16:30`)
+      const missed = appts.find((a) => a.nr === 'zappy:501' && a.at === '2026-03-10 17:00')
+      check('MARKINGS import: confirmed consultation with Ana Nunes at 10:00 (English date)', mc.status === 200 && mc.data.complete && conf?.status === 'CONFIRMED' && conf?.type === 'CONSULTATION' && conf?.provider_id === 'ana-nunes' && /Traz exames/.test(conf?.notes ?? ''), JSON.stringify({ mc: mc.data?.counts, appts }).slice(0, 500))
+      check('…"Awaiting customer confirmation" (US date, 4:30 PM) is an unconfirmed booking', awaiting?.status === 'SCHEDULED' && awaiting?.type === 'EVALUATION', JSON.stringify(awaiting))
+      check('…"Missing" is a no-show', missed?.status === 'NO_SHOW' && missed?.type === 'ORTHODONTICS' && missed?.provider_id === null, JSON.stringify(missed))
+      const alertsPatient = (await db.query("select count(*)::int as n from patients where external_id='zappy:9001'")).rows[0].n
+      const ritaWait = (await db.query("select w.status, w.notes from waitlist_entries w join patients p on p.id=w.patient_id where p.external_id='zappy:501' and w.notes like 'Lista de espera no Zappy%'")).rows
+      check('…no patient is made from the ALERTS column; the waiting-list row joins the CRM waiting list', alertsPatient === 0 && ritaWait.length === 1 && ritaWait[0].status === 'ACTIVE', JSON.stringify({ alertsPatient, ritaWait }))
+      const again = await markUp(true)
+      check('uploading the same MARKINGS files again changes nothing', again.status === 200 && (again.data.counts['bookings.created'] ?? 0) === 0 && (again.data.counts['bookings.updated'] ?? 0) === 0 && (await db.query("select count(*)::int as n from waitlist_entries w join patients p on p.id=w.patient_id where p.external_id='zappy:501' and w.notes like 'Lista de espera no Zappy%'")).rows[0].n === 1, JSON.stringify(again.data?.counts))
+    }
     const agendaPage = await admin.req('/appointments?agenda=1')
     check('/appointments?agenda=1 renders (200)', agendaPage.status === 200, String(agendaPage.status))
   }

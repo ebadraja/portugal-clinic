@@ -15,14 +15,14 @@ type Result = {
   commit: boolean
   complete: boolean
   clients: { rows: number; columns: Record<string, string>; unused: string[] } | null
-  bookings: { rows: number; columns: Record<string, string>; unused: string[] } | null
+  bookings: { rows: number; files: number; columns: Record<string, string>; unused: string[] } | null
   counts: Record<string, number>
   report: Row[]
   problems: Row[]
   problemCount: number
   bookingStatuses: Record<string, number>
-  unknownServices: { name: string; count: number }[]
-  unknownStaff: { name: string; count: number }[]
+  unknownServices: { name: string; count: number; guess: string | null }[]
+  unknownStaff: { name: string; count: number; guess: string | null }[]
   upcomingPerDay: { date: string; count: number }[]
   missingFromExport: number
   nextOnlyOnClients: { missing: number; created: number }
@@ -86,7 +86,7 @@ const n = (r: Result | null, k: string) => r?.counts[k] ?? 0
 
 export function ZappyImportDialog({ open, onClose, onImported }: { open: boolean; onClose: () => void; onImported: () => void }) {
   const [clients, setClients] = useState<File | null>(null)
-  const [bookings, setBookings] = useState<File | null>(null)
+  const [bookings, setBookings] = useState<File[]>([])
   const [mapping, setMapping] = useState<Mapping>(loadMapping)
   const [createNext, setCreateNext] = useState(false)
   const [cancelMissing, setCancelMissing] = useState(false)
@@ -112,12 +112,13 @@ export function ZappyImportDialog({ open, onClose, onImported }: { open: boolean
       .catch(() => {})
   }, [open, options])
 
-  const tooBig = [clients, bookings].some((f) => f && f.size > 4 * 1024 * 1024)
+  const totalBytes = (clients?.size ?? 0) + bookings.reduce((n, f) => n + f.size, 0)
+  const tooBig = [clients, ...bookings].some((f) => f && f.size > 4 * 1024 * 1024) || totalBytes > 4.4 * 1024 * 1024
 
   async function send(commit: boolean): Promise<Result> {
     const fd = new FormData()
     if (clients) fd.append("clients", clients)
-    if (bookings) fd.append("bookings", bookings)
+    for (const b of bookings) fd.append("bookings", b)
     fd.append("map", JSON.stringify(mapping))
     if (commit) fd.append("commit", "1")
     if (createNext) fd.append("createNextFromClients", "1")
@@ -138,7 +139,7 @@ export function ZappyImportDialog({ open, onClose, onImported }: { open: boolean
       if (options && r.unknownStaff.length) {
         const staff = { ...mapping.staff }
         for (const s of r.unknownStaff) {
-          const g = guessProvider(s.name, options.providers)
+          const g = s.guess ?? guessProvider(s.name, options.providers)
           if (g && !staff[s.name]) staff[s.name] = g
         }
         if (Object.keys(staff).length !== Object.keys(mapping.staff).length) setMapping({ ...mapping, staff })
@@ -183,7 +184,7 @@ export function ZappyImportDialog({ open, onClose, onImported }: { open: boolean
   }
   function reset() {
     setClients(null)
-    setBookings(null)
+    setBookings([])
     setPreview(null)
     setFinal(null)
     setError(null)
@@ -208,26 +209,36 @@ export function ZappyImportDialog({ open, onClose, onImported }: { open: boolean
           <div className="grid gap-4">
             <ol className="list-decimal space-y-1 rounded-lg bg-slate-50 p-3 pl-7 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
               <li>In Zappy: <strong>customers → export</strong>. Open the file in Excel and choose <strong>Save As → CSV UTF-8</strong>.</li>
-              <li>Optional: the <strong>appointment list</strong> (reports → appointments), saved the same way, to bring the agenda over too.</li>
+              <li>
+                Appointments: <strong>reports → MARKINGS</strong>, FILTER <strong>ALL MARKINGS</strong>, category and contributor <strong>All</strong>, then SEARCH → EXPORT.
+                Zappy allows 3 months per export — export each 3-month period and choose all the files here at once. Overlapping dates are fine.
+              </li>
             </ol>
-            {[
-              { label: "Clients export (CSV)", file: clients, set: setClients, required: true },
-              { label: "Appointment list (CSV, optional)", file: bookings, set: setBookings, required: false },
-            ].map((f) => (
-              <label key={f.label} className="grid cursor-pointer gap-1.5 rounded-xl border-2 border-dashed border-slate-300 p-4 text-sm hover:border-blue-400 dark:border-slate-700">
-                <span className="font-medium">{f.label}</span>
-                <span className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                  <Upload className="h-4 w-4" />
-                  {f.file ? `${f.file.name} · ${(f.file.size / 1024).toFixed(0)} KB` : "Choose a .csv file"}
-                </span>
-                <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(e) => f.set(e.target.files?.[0] ?? null)} />
-              </label>
-            ))}
-            {tooBig && <p className="text-sm text-red-600">A file is larger than 4 MB. Export one year at a time, or ask for the command-line import.</p>}
+            <label className="grid cursor-pointer gap-1.5 rounded-xl border-2 border-dashed border-slate-300 p-4 text-sm hover:border-blue-400 dark:border-slate-700">
+              <span className="font-medium">Clients export (CSV)</span>
+              <span className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                <Upload className="h-4 w-4" />
+                {clients ? `${clients.name} · ${(clients.size / 1024).toFixed(0)} KB` : "Choose a .csv file"}
+              </span>
+              <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(e) => setClients(e.target.files?.[0] ?? null)} />
+            </label>
+            <label className="grid cursor-pointer gap-1.5 rounded-xl border-2 border-dashed border-slate-300 p-4 text-sm hover:border-blue-400 dark:border-slate-700">
+              <span className="font-medium">Appointment exports (CSV, optional — select several)</span>
+              <span className="flex items-start gap-2 text-slate-600 dark:text-slate-400">
+                <Upload className="mt-0.5 h-4 w-4 shrink-0" />
+                {bookings.length ? (
+                  <span className="grid">
+                    {bookings.map((f) => <span key={f.name}>{f.name} · {(f.size / 1024).toFixed(0)} KB</span>)}
+                  </span>
+                ) : "Choose one or more .csv files"}
+              </span>
+              <input type="file" accept=".csv,text/csv,.txt,.tsv" multiple className="sr-only" onChange={(e) => setBookings(Array.from(e.target.files ?? []))} />
+            </label>
+            {tooBig && <p className="text-sm text-red-600">Too much to upload at once (4 MB in total). Choose fewer appointment files now and the rest in a second import — re-importing is safe.</p>}
             {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/40 dark:text-red-200">{error}</p>}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={onClose}>Cancel</Button>
-              <Button onClick={check} disabled={(!clients && !bookings) || tooBig || phase === "checking"} className="min-w-36">
+              <Button onClick={check} disabled={(!clients && bookings.length === 0) || tooBig || phase === "checking"} className="min-w-36">
                 {phase === "checking" ? <><Loader2 className="animate-spin" /> Checking…</> : "Check files"}
               </Button>
             </div>
@@ -266,12 +277,23 @@ export function ZappyImportDialog({ open, onClose, onImported }: { open: boolean
 
             {preview.bookings && (
               <section className="grid gap-2">
-                <h3 className="font-semibold">Appointments <span className="font-normal text-muted-foreground">· {preview.bookings.rows} rows</span></h3>
+                <h3 className="font-semibold">Appointments <span className="font-normal text-muted-foreground">· {preview.bookings.rows} rows{preview.bookings.files > 1 ? ` in ${preview.bookings.files} files` : ""}</span></h3>
                 <p className="text-muted-foreground">
                   {n(preview, "bookings.created")} new · {n(preview, "bookings.updated")} updated · {n(preview, "bookings.unchanged")} up to date
                   {n(preview, "bookings.rejected") > 0 && <span className="text-red-700"> · {n(preview, "bookings.rejected")} rejected</span>}
-                  {" · "}{Object.entries(preview.bookingStatuses).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(", ")}
+                  {" · "}{Object.entries(preview.bookingStatuses).map(([k, v]) => `${v} ${k === "NO_SHOW" ? "no-show" : k.toLowerCase()}`).join(", ")}
                 </p>
+                {(n(preview, "bookings.waitlist") + n(preview, "bookings.personalTime") + n(preview, "bookings.skippedStaff") + n(preview, "bookings.duplicateRow")) > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {[
+                      n(preview, "bookings.waitlist") ? `${n(preview, "bookings.waitlist")} on Zappy's waiting list (upcoming ones join the CRM waiting list)` : "",
+                      n(preview, "bookings.personalTime") ? `${n(preview, "bookings.personalTime")} personal time (not imported — use Block time)` : "",
+                      n(preview, "bookings.skippedStaff") ? `${n(preview, "bookings.skippedStaff")} in columns set to “Don't import”` : "",
+                      n(preview, "bookings.duplicateRow") ? `${n(preview, "bookings.duplicateRow")} repeated (same booking in two files or twice in Zappy)` : "",
+                    ].filter(Boolean).join(" · ")}
+                  </p>
+                )}
+                {preview.bookings.unused.length > 0 && <p className="text-xs text-muted-foreground">Not imported: {preview.bookings.unused.join(", ")}</p>}
               </section>
             )}
 
@@ -281,9 +303,13 @@ export function ZappyImportDialog({ open, onClose, onImported }: { open: boolean
                 {preview.unknownServices.map((s) => (
                   <div key={s.name} className="flex flex-wrap items-center justify-between gap-2">
                     <span>{s.name} <span className="text-muted-foreground">({s.count})</span></span>
-                    <select className={selectCls} value={mapping.services[s.name] ?? mapping.defaultType} onChange={(e) => setMapping({ ...mapping, services: { ...mapping.services, [s.name]: e.target.value } })} aria-label={`Type for ${s.name}`}>
+                    <select className={selectCls} value={mapping.services[s.name] ?? s.guess ?? mapping.defaultType} onChange={(e) => setMapping({ ...mapping, services: { ...mapping.services, [s.name]: e.target.value } })} aria-label={`Type for ${s.name}`}>
                       {typeOptions.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}
                       {!typeOptions.some((t) => t.type === "OTHER") && <option value="OTHER">Other</option>}
+                      {(() => {
+                        const v = mapping.services[s.name] ?? s.guess
+                        return v && v !== "OTHER" && !typeOptions.some((t) => t.type === v) ? <option value={v}>{v.charAt(0) + v.slice(1).toLowerCase().replace(/_/g, " ")} (switched off in Settings)</option> : null
+                      })()}
                     </select>
                   </div>
                 ))}
@@ -296,12 +322,16 @@ export function ZappyImportDialog({ open, onClose, onImported }: { open: boolean
                       else delete staff[s.name]
                       setMapping({ ...mapping, staff })
                     }} aria-label={`Dentist for ${s.name}`}>
-                      <option value="">No dentist</option>
+                      <option value="">No dentist (own column)</option>
+                      <option value="__skip">Don&apos;t import (reminders, not patients)</option>
                       {providerOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
                 ))}
-                <p className="text-xs text-muted-foreground">Choices are remembered for the next import. Press “Check again” to see them applied.</p>
+                <p className="text-xs text-muted-foreground">
+                  Services show the type the CRM guessed from the name and Zappy&apos;s category. Missing a dentist? Add them in Settings → Dentists first.
+                  Choices are remembered for the next import. Press “Check again” to see them applied.
+                </p>
               </section>
             )}
 
@@ -348,7 +378,7 @@ export function ZappyImportDialog({ open, onClose, onImported }: { open: boolean
                     <tbody>
                       {preview.problems.slice(0, 200).map((p, i) => (
                         <tr key={i} className="border-t border-border">
-                          <td className="px-2 py-1 tabular-nums text-muted-foreground">{p.file === "bookings" ? "Appt " : ""}{p.row || "—"}</td>
+                          <td className="px-2 py-1 tabular-nums text-muted-foreground">{p.file.startsWith("bookings") ? `Appt${p.file.length > 8 ? ` file ${p.file.slice(8)}` : ""} ` : ""}{p.row || "—"}</td>
                           <td className="px-2 py-1">{p.name || p.externalId}</td>
                           <td className="px-2 py-1">{p.action === "duplicate" || p.action === "reject" || p.action === "error" ? <strong>{p.action}: </strong> : null}{p.detail}</td>
                         </tr>

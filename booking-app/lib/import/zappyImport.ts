@@ -17,8 +17,8 @@ import { phoneKey } from '@/lib/clinic/phone'
 import { encrypt } from '@/lib/crypto'
 import { csvRecords, decodeCsvBytes } from '@/lib/import/csv'
 import {
-  BOOKING_COLUMNS, CLIENT_COLUMNS, type ZappyMap, mapClientRow, mapService, mapStaff, mapStatus, norm, parseDate,
-  parseDuration, parseTime, phoneE164, pick, resolveColumns, splitName, titleCase,
+  BOOKING_COLUMNS, CLIENT_COLUMNS, SKIP_STAFF, type ZappyMap, detectDateOrder, guessProviderId, guessType, isPersonalTime, isWaitingList,
+  mapClientRow, mapService, mapStaff, mapStatus, norm, parseDate, parseDuration, parseTime, phoneE164, pick, resolveColumns, splitName, titleCase,
 } from '@/lib/import/zappy'
 import { createAppointment, setAppointmentStatus } from '@/lib/appointments/booking'
 import { replanUpcoming } from '@/lib/appointments/replan'
@@ -27,7 +27,8 @@ export type ReportRow = { file: string; row: number; action: string; entity: str
 
 export type ImportInput = {
   clients?: Uint8Array | null
-  bookings?: Uint8Array | null
+  /** One or more appointment exports (Zappy allows 3 months per export). */
+  bookings?: Uint8Array | Uint8Array[] | null
   map: ZappyMap
   commit: boolean
   createNextFromClients?: boolean
@@ -43,12 +44,14 @@ export type ImportResult = {
   /** false when a commit stopped at the deadline — run it again with the same files. */
   complete: boolean
   clients: { rows: number; columns: Record<string, string>; unused: string[] } | null
-  bookings: { rows: number; columns: Record<string, string>; unused: string[] } | null
+  bookings: { rows: number; files: number; columns: Record<string, string>; unused: string[] } | null
   counts: Record<string, number>
   report: ReportRow[]
   bookingStatuses: Record<string, number>
-  unknownServices: { name: string; count: number }[]
-  unknownStaff: { name: string; count: number }[]
+  /** `guess` = the type used until the mapping says otherwise. */
+  unknownServices: { name: string; count: number; guess: string | null }[]
+  /** `guess` = the dentist whose name matches, used until the mapping says otherwise. */
+  unknownStaff: { name: string; count: number; guess: string | null }[]
   upcomingPerDay: { date: string; count: number }[]
   missingFromExport: number
   nextOnlyOnClients: { missing: number; created: number }
@@ -70,7 +73,7 @@ export function normaliseMap(raw: Partial<ZappyMap> | null | undefined, provider
   }
   if (!(APPOINTMENT_TYPE_KEYS as readonly string[]).includes(map.defaultType)) throw new ImportError(`Mapping: unknown default type ${map.defaultType}`)
   for (const [name, id] of Object.entries(map.staff)) {
-    if (!providerIds.includes(id)) throw new ImportError(`Mapping: staff "${name}" → unknown dentist id "${id}" (Settings → Practice → Dentists)`)
+    if (id !== SKIP_STAFF && !providerIds.includes(id)) throw new ImportError(`Mapping: staff "${name}" → unknown dentist id "${id}" (Settings → Practice → Dentists)`)
   }
   if (map.defaultProviderId && !providerIds.includes(map.defaultProviderId)) throw new ImportError(`Mapping: default dentist "${map.defaultProviderId}" is not a dentist id`)
   return map
@@ -272,11 +275,29 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
   }
 
   // ── Bookings ──
-  if (input.bookings) {
-    const { headers, records } = csvRecords(decodeCsvBytes(input.bookings))
-    const cols = resolveColumns(headers, BOOKING_COLUMNS)
-    result.bookings = { rows: records.length, columns: cols as Record<string, string>, unused: headers.filter((h) => !Object.values(cols).includes(h)) }
-    if (!cols.date) throw new ImportError('Bookings file: no date column found. Is this the Zappy appointment list?')
+  const bookingFiles = Array.isArray(input.bookings) ? input.bookings : input.bookings ? [input.bookings] : []
+  if (bookingFiles.length) {
+    type Cols = ReturnType<typeof resolveColumns<typeof BOOKING_COLUMNS>>
+    const rows: { file: string; rowNo: number; rec: Record<string, string>; cols: Cols; order: ReturnType<typeof detectDateOrder>; fileIndex: number }[] = []
+    const unusedAll = new Set<string>()
+    let firstCols: Cols | null = null
+    for (const [fi, bytes] of bookingFiles.entries()) {
+      const { headers, records } = csvRecords(decodeCsvBytes(bytes))
+      const cols = resolveColumns(headers, BOOKING_COLUMNS)
+      const label = bookingFiles.length > 1 ? `appointments file ${fi + 1}` : 'Bookings file'
+      if (!cols.date) throw new ImportError(`${label}: no date column found. Is this the Zappy appointment list (reports → MARKINGS → export)?`)
+      firstCols ??= cols
+      headers.filter((h) => h && !Object.values(cols).includes(h)).forEach((h) => unusedAll.add(h))
+      const order = detectDateOrder(records.map((r) => pick(r, cols, 'date')))
+      records.forEach((rec, i) => rows.push({ file: bookingFiles.length > 1 ? `bookings${fi + 1}` : 'bookings', rowNo: i + 2, rec, cols, order, fileIndex: fi }))
+    }
+    result.bookings = { rows: rows.length, files: bookingFiles.length, columns: (firstCols ?? {}) as Record<string, string>, unused: [...unusedAll] }
+    /** Dates each file covers: "missing from Zappy" is only judged inside them. */
+    const ranges = bookingFiles.map(() => ({ min: '9999-12-31', max: '0000-01-01' }))
+    const activeProviders = settings.providers.filter((p) => p.active)
+    const existingWaitNotes = new Set(
+      (await prisma.waitlistEntry.findMany({ where: { notes: { startsWith: 'Lista de espera no Zappy' } }, select: { patientId: true, notes: true } })).map((w) => `${w.patientId}|${w.notes}`),
+    )
 
     const existingAppts = await prisma.appointment.findMany({
       where: { externalId: { startsWith: 'zappy:' } },
@@ -289,30 +310,51 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
     const futurePerDay = new Map<string, number>()
     const statusCounts = new Map<string, number>()
     const now = new Date()
-    let minDate = '9999-12-31'
-    let maxDate = '0000-01-01'
+    const serviceGuess = new Map<string, string | null>()
+    const staffGuess = new Map<string, string | null>()
 
-    for (const [i, rec] of records.entries()) {
+    for (const { file, rowNo, rec, cols, order, fileIndex } of rows) {
       if (outOfTime()) {
         result.complete = false
         return finish()
       }
-      const rowNo = i + 2
       const clientName = titleCase(pick(rec, cols, 'clientName'))
-      const base = { file: 'bookings', row: rowNo, entity: 'appointment', externalId: '', name: clientName }
-      const d = parseDate(pick(rec, cols, 'date'))
+      const base = { file, row: rowNo, entity: 'appointment', externalId: '', name: clientName }
+      const statusRaw = pick(rec, cols, 'status')
+      const d = parseDate(pick(rec, cols, 'date'), order)
       const start = parseTime(pick(rec, cols, 'start')) ?? d?.time ?? null
       if (!d || !start) {
         bump('bookings.rejected')
         note({ ...base, action: 'reject', detail: `date/time not recognised: "${pick(rec, cols, 'date')}" "${pick(rec, cols, 'start')}"` })
         continue
       }
+      if (d.date < ranges[fileIndex].min) ranges[fileIndex].min = d.date
+      if (d.date > ranges[fileIndex].max) ranges[fileIndex].max = d.date
+      if (isPersonalTime(statusRaw)) {
+        bump('bookings.personalTime')
+        note({ ...base, action: 'skip', detail: 'personal time in Zappy — use Block time in the agenda' })
+        continue
+      }
       const service = pick(rec, cols, 'service')
       const svc = mapService(service, map)
-      if (service && !svc.known) unknownServices.set(service, (unknownServices.get(service) ?? 0) + 1)
+      if (service && !svc.known) {
+        unknownServices.set(service, (unknownServices.get(service) ?? 0) + 1)
+        if (!serviceGuess.has(service)) serviceGuess.set(service, guessType(service, pick(rec, cols, 'category')))
+        const g = serviceGuess.get(service)
+        if (g) svc.type = g as typeof svc.type
+      }
       const staffName = pick(rec, cols, 'staff')
       const st = mapStaff(staffName, map)
-      if (staffName && !st.known) unknownStaff.set(staffName, (unknownStaff.get(staffName) ?? 0) + 1)
+      if (staffName && !st.known) {
+        unknownStaff.set(staffName, (unknownStaff.get(staffName) ?? 0) + 1)
+        if (!staffGuess.has(staffName)) staffGuess.set(staffName, guessProviderId(staffName, activeProviders))
+        st.providerId = staffGuess.get(staffName) ?? st.providerId
+      }
+      if (st.providerId === SKIP_STAFF) {
+        bump('bookings.skippedStaff')
+        note({ ...base, action: 'skip', detail: `"${staffName}" is set to "Don't import"` })
+        continue
+      }
       const endRaw = parseTime(pick(rec, cols, 'end'))
       const typeCfg = settings.appointmentTypes.find((t) => t.type === svc.type)
       let duration = parseDuration(pick(rec, cols, 'duration')) ?? 0
@@ -343,7 +385,7 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
         }
         bump('clients.createdFromBooking')
         const data = { firstName: titleCase(nm.firstName), lastName: titleCase(nm.lastName), phone, externalId: zcid ? `zappy:${zcid}` : null }
-        note({ file: 'bookings', row: rowNo, entity: 'patient', externalId: data.externalId ?? '', name: clientName, action: 'create', detail: 'client only found in the bookings file' })
+        note({ file, row: rowNo, entity: 'patient', externalId: data.externalId ?? '', name: clientName, action: 'create', detail: 'client only found in the bookings file' })
         let id = `planned-${++tempSeq}`
         if (COMMIT) {
           const created = await prisma.patient.create({ data: { ...data, status: 'ACTIVE', createdById: author.id } })
@@ -368,13 +410,34 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
 
       const startUtc = zonedTimeToUtc(d.date, start, tz)
       const isPast = startUtc.getTime() < now.getTime()
-      const mapped = mapStatus(pick(rec, cols, 'status'), isPast)
+
+      // Waiting list: goes on the CRM waiting list (future dates only), not into the agenda.
+      if (isWaitingList(statusRaw)) {
+        bump('bookings.waitlist')
+        const wlNote = `Lista de espera no Zappy (${d.date}${service ? ` · ${service}` : ''})`
+        const fresh = d.date >= today && !existingWaitNotes.has(`${patient.id}|${wlNote}`)
+        note({ ...base, action: fresh ? 'waitlist' : 'skip', detail: fresh ? `added to the waiting list: ${wlNote}` : 'waiting list entry in the past or already imported' })
+        if (fresh && COMMIT && !patient.id.startsWith('planned-')) {
+          const active = await prisma.waitlistEntry.findFirst({ where: { patientId: patient.id, status: 'ACTIVE' }, select: { id: true } })
+          if (!active) {
+            await prisma.waitlistEntry.create({
+              data: { patientId: patient.id, type: svc.type, providerId: st.providerId, fromDate: today, untilDate: d.date, notes: wlNote, createdById: author.id },
+            })
+          }
+          existingWaitNotes.add(`${patient.id}|${wlNote}`)
+        }
+        continue
+      }
+
+      const mapped = mapStatus(statusRaw, isPast)
+      // Paid in Zappy = it happened.
+      if (mapped.inferred && pick(rec, cols, 'paymentDate')) Object.assign(mapped, { status: 'COMPLETED', inferred: false })
       statusCounts.set(mapped.status, (statusCounts.get(mapped.status) ?? 0) + 1)
-      if (d.date < minDate) minDate = d.date
-      if (d.date > maxDate) maxDate = d.date
       if (!isPast && (mapped.status === 'SCHEDULED' || mapped.status === 'CONFIRMED')) futurePerDay.set(d.date, (futurePerDay.get(d.date) ?? 0) + 1)
-      const online = /online|app|website|site|@|instagram|facebook/i.test(pick(rec, cols, 'channel'))
-      const notes = [pick(rec, cols, 'notes'), mapped.note, mapped.inferred ? '[Estado inferido na importação]' : null].filter(Boolean).join(' · ') || null
+      const online = /online|app|website|site|@|instagram|facebook|^(sim|yes|true|1)$/i.test(pick(rec, cols, 'channel'))
+      const cancelReason = pick(rec, cols, 'cancelReason')
+      const notes = [pick(rec, cols, 'notes'), pick(rec, cols, 'notes2'), cancelReason && mapped.status === 'CANCELLED' ? null : cancelReason, mapped.note, mapped.inferred ? '[Estado inferido na importação]' : null]
+        .filter(Boolean).join(' · ') || null
 
       const prior = apptByExternal.get(externalId)
       if (prior) {
@@ -393,7 +456,7 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
               where: { id: prior.id },
               data: {
                 startTime: startUtc, endTime: endUtc, duration, type: svc.type, providerId: st.providerId, provider: provider?.name ?? null,
-                ...(diff.includes('status') && { status: mapped.status as AppointmentStatus, ...(mapped.status === 'CANCELLED' && { cancelledAt: now, cancelReason: 'Cancelada no Zappy' }) }),
+                ...(diff.includes('status') && { status: mapped.status as AppointmentStatus, ...(mapped.status === 'CANCELLED' && { cancelledAt: now, cancelReason: cancelReason || 'Cancelada no Zappy' }) }),
               },
             })
             await tx.appointmentEvent.create({ data: { appointmentId: prior.id, kind: 'UPDATED', actor: 'IMPORT', data: { fields: diff, source: 'zappy' } } })
@@ -417,7 +480,7 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
           bump('bookings.failed')
           note({ ...base, action: 'error', detail: r.message })
         } else if (mapped.status === 'CANCELLED') {
-          await prisma.appointment.update({ where: { id: r.appointment.id }, data: { cancelledAt: r.appointment.startTime, cancelReason: mapped.note ?? 'Cancelada no Zappy' } })
+          await prisma.appointment.update({ where: { id: r.appointment.id }, data: { cancelledAt: r.appointment.startTime, cancelReason: cancelReason || mapped.note || 'Cancelada no Zappy' } })
         }
       }
     }
@@ -425,7 +488,7 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
     // Bookings deleted in Zappy since the last import (future only, inside the exported range)
     const missing = existingAppts.filter((a) => {
       const day = utcToZoned(a.startTime, tz).date
-      return !seen.has(a.externalId!) && day >= today && day >= minDate && day <= maxDate && (a.status === 'SCHEDULED' || a.status === 'CONFIRMED')
+      return !seen.has(a.externalId!) && day >= today && ranges.some((r) => day >= r.min && day <= r.max) && (a.status === 'SCHEDULED' || a.status === 'CONFIRMED')
     })
     result.missingFromExport = missing.length
     for (const a of missing) {
@@ -436,8 +499,8 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
     }
 
     result.bookingStatuses = Object.fromEntries(statusCounts)
-    result.unknownServices = [...unknownServices].sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }))
-    result.unknownStaff = [...unknownStaff].sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }))
+    result.unknownServices = [...unknownServices].sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count, guess: serviceGuess.get(name) ?? null }))
+    result.unknownStaff = [...unknownStaff].sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count, guess: staffGuess.get(name) ?? null }))
     result.upcomingPerDay = [...futurePerDay].sort((a, b) => a[0].localeCompare(b[0])).map(([date, count]) => ({ date, count }))
   }
 

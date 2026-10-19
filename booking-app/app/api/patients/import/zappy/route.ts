@@ -9,6 +9,7 @@ export const maxDuration = 60
 
 /** Vercel refuses request bodies above ~4.5 MB; say so clearly before it does. */
 const MAX_BYTES = 4 * 1024 * 1024
+const MAX_TOTAL = 4.4 * 1024 * 1024
 /** Leave time to answer before the function limit. */
 const BUDGET_MS = 45_000
 
@@ -16,7 +17,7 @@ const PROBLEM_ACTIONS = new Set(["reject", "duplicate", "error", "missing", "mis
 const WARNING_RE = /not recognised|invalid|not valid|no surname/
 
 // ── POST /api/patients/import/zappy — Patients → "Import from Zappy" ──────────
-// multipart/form-data: clients (file), bookings (file, optional), commit ("1"),
+// multipart/form-data: clients (file), bookings (one or more files: Zappy exports 3 months at a time), commit ("1"),
 // createNextFromClients ("1"), cancelMissing ("1"), map (JSON: services/staff/defaults).
 // Preview (no commit) writes nothing. Commit returns complete:false when it ran out of time —
 // send the same request again to continue (already-imported rows are skipped).
@@ -25,8 +26,8 @@ export async function POST(req: NextRequest) {
   const guard = await requireStaff({ admin: true })
   if (!guard.ok) return guard.response
   const length = Number(req.headers.get("content-length") ?? 0)
-  if (length > MAX_BYTES * 2 + 64 * 1024) {
-    return NextResponse.json({ error: "Files are too large to upload (max 4 MB each). Split the export by year, or use scripts/import-zappy.ts." }, { status: 413 })
+  if (length > MAX_TOTAL) {
+    return NextResponse.json({ error: "These files are too large to upload together (4 MB in total). Upload fewer appointment files at a time — re-uploading is safe." }, { status: 413 })
   }
 
   let form: FormData
@@ -35,16 +36,16 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Send the CSV files as a form upload." }, { status: 400 })
   }
-  const file = async (name: string): Promise<Uint8Array | null> => {
-    const f = form.get(name)
+  const read = async (f: FormDataEntryValue | null): Promise<Uint8Array | null> => {
     if (!f || typeof f === "string" || f.size === 0) return null
-    if (f.size > MAX_BYTES) throw new ImportError(`${f.name} is larger than 4 MB. Split the export by year, or use scripts/import-zappy.ts.`)
+    if (f.size > MAX_BYTES) throw new ImportError(`${f.name} is larger than 4 MB. Split the export into smaller date ranges, or use scripts/import-zappy.ts.`)
     return new Uint8Array(await f.arrayBuffer())
   }
 
   try {
-    const [clients, bookings] = await Promise.all([file("clients"), file("bookings")])
-    if (!clients && !bookings) return NextResponse.json({ error: "Choose the Zappy clients export (and optionally the appointment list)." }, { status: 400 })
+    const clients = await read(form.get("clients"))
+    const bookings = (await Promise.all(form.getAll("bookings").map(read))).filter((b): b is Uint8Array => !!b)
+    if (!clients && bookings.length === 0) return NextResponse.json({ error: "Choose the Zappy clients export (and optionally the appointment list)." }, { status: 400 })
     const settings = await getClinicSettings()
     let rawMap: Partial<ZappyMap> | null = null
     const mapField = form.get("map")
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     const r = await runZappyImport({
       clients,
-      bookings,
+      bookings: bookings.length ? bookings : null,
       map,
       commit,
       createNextFromClients: form.get("createNextFromClients") === "1",

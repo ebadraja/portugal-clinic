@@ -1,8 +1,8 @@
 /**
  * Zappy → CRM mapping. Pure: no database access (the script in scripts/import-zappy.ts does I/O).
  *
- * Zappy exports clients as CSV/Excel and bookings via the "Listagem de marcações" report
- * (or the Public API). Column names vary between versions/languages, so every field is
+ * Zappy exports clients as CSV/Excel and bookings via reports → MARKINGS ("Marcações", at most
+ * 3 months per export; FILTER = ALL MARKINGS). Column names vary between versions/languages, so every field is
  * found through a list of aliases (accent- and case-insensitive). The mapping file
  * (scripts/zappy-map.json) translates Zappy services and staff into CRM types and dentists.
  */
@@ -65,20 +65,27 @@ export const CLIENT_COLUMNS = {
   lastAppointment: ['last appointment date', 'ultima marcacao'],
 } as const
 
+// First alias = Zappy's MARKINGS export header (date, status, client_name, client_internal_nr,
+// item_name, online, category, service_provider, …, notes, Obs.3, cancel_reason). It has no
+// booking id: bookings get a stable key from client + date/time + service.
 export const BOOKING_COLUMNS = {
   id: ['n marcacao', 'no marcacao', 'id marcacao', 'codigo marcacao', 'marcacao', 'booking id', 'appointment id', 'id'],
-  clientId: ['n cliente', 'no cliente', 'id cliente', 'codigo cliente', 'cliente id', 'client id'],
-  clientName: ['cliente', 'nome cliente', 'nome', 'client', 'customer'],
+  clientId: ['client internal nr', 'n cliente', 'no cliente', 'id cliente', 'codigo cliente', 'cliente id', 'client id'],
+  clientName: ['client name', 'cliente', 'nome cliente', 'nome', 'client', 'customer'],
   phone: ['telemovel', 'telefone', 'contacto', 'phone', 'mobile'],
   date: ['data', 'dia', 'data marcacao', 'date'],
   start: ['hora', 'hora inicio', 'inicio', 'hora de inicio', 'start', 'start time'],
   end: ['hora fim', 'fim', 'hora de fim', 'end', 'end time'],
   duration: ['duracao', 'duracao min', 'minutos', 'duration'],
-  service: ['servico', 'servicos', 'tratamento', 'tratamentos', 'service', 'services'],
-  staff: ['colaborador', 'profissional', 'funcionario', 'medico', 'terapeuta', 'staff', 'employee'],
-  status: ['estado', 'status', 'situacao'],
-  notes: ['observacoes', 'notas', 'obs', 'notes', 'comentario'],
-  channel: ['canal', 'origem', 'tipo de marcacao', 'online', 'source'],
+  service: ['item name', 'servico', 'servicos', 'tratamento', 'tratamentos', 'service', 'services', 'service or product'],
+  staff: ['service provider', 'colaborador', 'profissional', 'funcionario', 'medico', 'terapeuta', 'staff', 'employee', 'contributor'],
+  status: ['status', 'estado', 'situacao', 'state'],
+  notes: ['notes', 'observacoes', 'notas', 'obs', 'comentario', 'internal notes'],
+  notes2: ['obs 3', 'observacoes 3', 'note 3'],
+  cancelReason: ['cancel reason', 'motivo cancelamento', 'motivo de cancelamento', 'reason for cancellation'],
+  category: ['category', 'categoria'],
+  paymentDate: ['payment date', 'data pagamento', 'data de pagamento'],
+  channel: ['online', 'canal', 'origem', 'tipo de marcacao', 'source'],
 } as const
 
 export type ColumnMap<T extends Record<string, readonly string[]>> = Partial<Record<keyof T, string>>
@@ -108,10 +115,52 @@ export function pick<T extends Record<string, readonly string[]>>(rec: Record<st
 
 // ─── Values ──────────────────────────────────────────────────────────────────
 
-/** dd/mm/yyyy (Portuguese), yyyy-mm-dd, dd-mm-yyyy, dd.mm.yy, Excel serial; optional time after. */
-export function parseDate(raw: string): { date: string; time: string | null } | null {
+export type DateOrder = 'dmy' | 'mdy'
+
+/**
+ * Day/month order of a file's numeric dates: "mdy" only when some date can't be day-first
+ * (10/20/2026) and none can't be month-first. Zappy's English back office writes US dates.
+ */
+export function detectDateOrder(values: string[]): DateOrder {
+  let dayFirst = false
+  let monthFirst = false
+  for (const v of values) {
+    const m = /^(\d{1,2})[/.-](\d{1,2})[/.-]\d{2,4}/.exec(v.trim())
+    if (!m) continue
+    if (Number(m[1]) > 12) dayFirst = true
+    if (Number(m[2]) > 12) monthFirst = true
+  }
+  return monthFirst && !dayFirst ? 'mdy' : 'dmy'
+}
+
+/** "5:00 PM", "17:15:00" after a date → "17:00", "17:15". */
+function timeAfter(rest: string): string | null {
+  const m = /(\d{1,2})[:h](\d{2})(?::\d{2})?\s*([ap])?\.?\s*m?\.?/i.exec(rest)
+  if (!m) return null
+  let h = Number(m[1])
+  const ap = m[3]?.toLowerCase()
+  if (ap === 'p' && h < 12) h += 12
+  if (ap === 'a' && h === 12) h = 0
+  return parseTime(`${h}:${m[2]}`)
+}
+
+/**
+ * dd/mm/yyyy (Portuguese; mm/dd with order "mdy"), yyyy-mm-dd, dd.mm.yy, "October 20, 2026",
+ * "20 de outubro de 2026", Excel serial; optional time after (24 h or AM/PM).
+ */
+export function parseDate(raw: string, order: DateOrder = 'dmy'): { date: string; time: string | null } | null {
   const t = raw.trim()
   if (!t) return null
+  const named = /^([a-zç]+)\.? (\d{1,2}),? (\d{4})(.*)$/i.exec(t) ?? /^(\d{1,2})(?: de)? ([a-zç]+)\.?(?: de)? (\d{4})(.*)$/i.exec(t)
+  if (named) {
+    const monthFirst = /^[a-zç]/i.test(named[1])
+    const mo = MONTHS[norm(monthFirst ? named[1] : named[2])]
+    const d = Number(monthFirst ? named[2] : named[1])
+    const y = Number(named[3])
+    const dt = new Date(Date.UTC(y, (mo ?? 0) - 1, d))
+    if (!mo || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null
+    return { date: dt.toISOString().slice(0, 10), time: timeAfter(named[4]) }
+  }
   if (/^\d{5}(\.\d+)?$/.test(t)) {
     // Excel serial day (1900 system): 45000 ≈ 2023-03-15
     const serial = Number(t)
@@ -122,20 +171,19 @@ export function parseDate(raw: string): { date: string; time: string | null } | 
     const mins = Math.round(frac * 1440)
     return { date: d.toISOString().slice(0, 10), time: frac ? `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}` : null }
   }
-  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2})[:h](\d{2}))?/.exec(t)
-  let y: number, mo: number, d: number, hh: string | undefined, mm: string | undefined
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})(.*)$/.exec(t)
+  let y: number, mo: number, d: number
   if (m) {
-    ;[y, mo, d, hh, mm] = [Number(m[1]), Number(m[2]), Number(m[3]), m[4], m[5]]
+    ;[y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])]
   } else {
-    m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})(?:\s+(\d{1,2})[:h](\d{2}))?/.exec(t)
+    m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})(.*)$/.exec(t)
     if (!m) return null
-    ;[d, mo, y, hh, mm] = [Number(m[1]), Number(m[2]), Number(m[3]), m[4], m[5]]
+    ;[d, mo, y] = order === 'mdy' ? [Number(m[2]), Number(m[1]), Number(m[3])] : [Number(m[1]), Number(m[2]), Number(m[3])]
     if (y < 100) y += y > 50 ? 1900 : 2000
   }
   const dt = new Date(Date.UTC(y, mo - 1, d))
   if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null
-  const time = hh !== undefined ? parseTime(`${hh}:${mm}`) : null
-  return { date: dt.toISOString().slice(0, 10), time }
+  return { date: dt.toISOString().slice(0, 10), time: timeAfter(m[4] ?? '') }
 }
 
 /** "9:30", "09h30", "0930", "9.30" → "09:30". */
@@ -464,16 +512,77 @@ export type MappedStatus = { status: AppointmentStatus; inferred: boolean; note:
 export function mapStatus(raw: string, isPast: boolean): MappedStatus {
   const t = norm(raw)
   const has = (...words: string[]) => words.some((w) => t.includes(w))
-  if (has('lista de espera', 'waiting')) return { status: 'CANCELLED', inferred: false, note: 'Lista de espera no Zappy' }
-  if (has('faltou', 'falta', 'nao compareceu', 'no show', 'noshow', 'ausente')) return { status: 'NO_SHOW', inferred: false, note: null }
+  // "Awaiting confirmation" also contains "waiting": only the waiting list itself counts.
+  if (isWaitingList(raw)) return { status: 'CANCELLED', inferred: false, note: 'Lista de espera no Zappy' }
+  // Zappy (English back office): "Missing (unpaid bookings)" / "Missing (paid bookings)" = no-show
+  if (has('faltou', 'falta', 'nao compareceu', 'no show', 'noshow', 'ausente', 'missing')) return { status: 'NO_SHOW', inferred: false, note: null }
   if (has('cancel', 'desmarc', 'anulad', 'eliminad')) return { status: 'CANCELLED', inferred: false, note: null }
-  if (has('conclu', 'realizad', 'finaliz', 'chegou', 'pagou', 'atendid', 'completed', 'done')) return { status: 'COMPLETED', inferred: false, note: null }
-  const confirmed = has('confirmad', 'confirmed') && !has('aguarda', 'por confirmar', 'nao confirm')
+  if (has('conclu', 'realizad', 'finaliz', 'chegou', 'pagou', 'atendid', 'completed', 'done', 'arrived')) return { status: 'COMPLETED', inferred: false, note: null }
+  if (/\b(paid|pago|paga)\b/.test(t) && !has('unpaid')) return { status: 'COMPLETED', inferred: false, note: null }
+  const confirmed = has('confirmad', 'confirmed') && !has('aguarda', 'por confirmar', 'nao confirm', 'awaiting')
   if (isPast) return { status: 'COMPLETED', inferred: true, note: null }
   return { status: confirmed ? 'CONFIRMED' : 'SCHEDULED', inferred: false, note: null }
 }
 
+/** Zappy "Personal time" (tempo pessoal): the professional's own time, not a patient booking. */
+export function isPersonalTime(status: string): boolean {
+  return /personal time|tempo pessoal|tempo livre|pausa pessoal/.test(norm(status))
+}
+
+/** Zappy "Appointments on a waiting list". */
+export function isWaitingList(status: string): boolean {
+  return /lista de espera|\bwaiting list\b|^waiting$/.test(norm(status))
+}
+
+/**
+ * A sensible CRM type for a Zappy service the mapping doesn't know, from the service name and
+ * Zappy's category ("A1.01.01.05: Urgent consultation", "Orthodontics"…). null = no idea.
+ */
+export function guessType(service: string, category: string): AppointmentType | null {
+  const s = norm(service)
+  const c = norm(category)
+  const any = (t: string, ...w: string[]) => w.some((x) => t.includes(x))
+  if (any(s, 'urgen', 'emergen', 'dor ')) return 'EMERGENCY'
+  if (any(s, 'first consult', 'primeira consulta', 'avaliac', 'evaluation', 'triagem')) return 'EVALUATION'
+  if (any(s, 'control', 'revis', 'follow', 'manutenc')) return any(c, 'orthodont', 'ortodont') ? 'ORTHODONTICS' : 'FOLLOW_UP'
+  if (any(s, 'higien', 'destartar', 'limpeza', 'cleaning', 'prophyl', 'scaling')) return 'HYGIENE'
+  if (any(s, 'bleach', 'branque', 'whitening', 'facet', 'veneer', 'estetic', 'aesthet')) return 'AESTHETICS'
+  if (any(s, 'implant')) return 'IMPLANT'
+  if (any(s, 'endodon', 'desvital', 'root canal', 'canal')) return 'ENDODONTICS'
+  if (any(s, 'extrac', 'extract', 'exodon', 'cirurg', 'surgery')) return 'SURGERY'
+  if (any(s, 'restaur', 'obtura', 'filling', 'composit')) return 'RESTORATIVE'
+  if (any(s, 'ortodon', 'orthodon', 'aparelho', 'aligner', 'alinhador', 'device')) return any(c, 'orthodont', 'ortodont') || any(s, 'ortodon', 'orthodon', 'aligner', 'alinhador') ? 'ORTHODONTICS' : null
+  if (any(s, 'consult')) return 'CONSULTATION'
+  if (any(c, 'orthodont', 'ortodont')) return 'ORTHODONTICS'
+  if (any(c, 'endodon')) return 'ENDODONTICS'
+  if (any(c, 'implant')) return 'IMPLANT'
+  if (any(c, 'surgery', 'cirurg', 'extraction', 'extrac')) return 'SURGERY'
+  if (any(c, 'preventive', 'prevent', 'periodon', 'higien')) return 'HYGIENE'
+  if (any(c, 'operative', 'dentistry', 'dentisteria', 'restaur')) return 'RESTORATIVE'
+  if (any(c, 'prosth', 'protes', 'reab')) return 'PROCEDURE'
+  if (any(c, 'imaging', 'imagio', 'radiolog')) return 'PROCEDURE'
+  if (any(c, 'aesthet', 'estetic')) return 'AESTHETICS'
+  if (any(c, 'consult')) return 'CONSULTATION'
+  return null
+}
+
+/** Zappy column ("ANA NUNES", "Dr. Katherine") → the CRM dentist with the most name words in common. */
+export function guessProviderId(staff: string, providers: { id: string; name: string }[]): string | null {
+  const titles = new Set(['dr', 'dra', 'doctor', 'doutor', 'doutora', 'prof'])
+  const words = norm(staff).split(' ').filter((w) => w.length > 2 && !titles.has(w))
+  let best: { id: string; score: number } | null = null
+  for (const p of providers) {
+    const pw = norm(p.name).split(' ')
+    const score = words.filter((w) => pw.includes(w)).length
+    if (score > 0 && (!best || score > best.score)) best = { id: p.id, score }
+  }
+  return best?.id ?? null
+}
+
 // ─── Mapping file ────────────────────────────────────────────────────────────
+
+/** Staff mapped to this are not imported (columns like ALERTS or SUPPORT that hold reminders, not patients). */
+export const SKIP_STAFF = '__skip'
 
 export type ZappyMap = {
   /** Zappy service name → CRM appointment type. Matching ignores case and accents. */

@@ -14,7 +14,7 @@ const MAX_TOTAL = 4.4 * 1024 * 1024
 const BUDGET_MS = 45_000
 
 const PROBLEM_ACTIONS = new Set(["reject", "duplicate", "error", "missing", "missing-next"])
-const WARNING_RE = /not recognised|invalid|not valid|no surname/
+const WARNING_RE = /not recognised|invalid|not valid|no surname|merge it with/
 
 // ── POST /api/patients/import/zappy — Patients → "Import from Zappy" ──────────
 // multipart/form-data: clients (file), bookings (one or more files: Zappy exports 3 months at a time), commit ("1"),

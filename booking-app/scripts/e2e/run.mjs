@@ -727,6 +727,25 @@ async function main() {
       const alertsPatient = (await db.query("select count(*)::int as n from patients where external_id='zappy:9001'")).rows[0].n
       const ritaWait = (await db.query("select w.status, w.notes from waitlist_entries w join patients p on p.id=w.patient_id where p.external_id='zappy:501' and w.notes like 'Lista de espera no Zappy%'")).rows
       check('…no patient is made from the ALERTS column; the waiting-list row joins the CRM waiting list', alertsPatient === 0 && ritaWait.length === 1 && ritaWait[0].status === 'ACTIVE', JSON.stringify({ alertsPatient, ritaWait }))
+      // A booking without a client Nº whose name two patients share: one new record, never one per round
+      await db.query("insert into patients (id, first_name, last_name, updated_at) values ('itest-joana-1', 'Joana', 'Lopes', now()), ('itest-joana-2', 'Joana', 'Lopes', now())")
+      const joanaFile = [MH.join('\t'), mrow({ date: en(f2, '11:00 AM'), status: 'Confirmed', client_name: 'Joana Lopes', item_name: 'Primeira consulta', service_provider: 'ANA NUNES' }), mrow({ date: en('2026-02-03', '9:00 AM'), status: 'Pagou', client_name: 'Joana Lopes', item_name: 'Primeira consulta', service_provider: 'ANA NUNES' })].join('\r\n') + '\r\n'
+      const joanaUp = async (commit) => {
+        const fd = new FormData()
+        fd.append('bookings', new Blob([joanaFile], { type: 'text/csv' }), 'zappy-joana.csv')
+        fd.append('map', JSON.stringify({ services: {}, staff: {}, defaultType: 'OTHER', defaultProviderId: null }))
+        if (commit) fd.append('commit', '1')
+        const res = await fetch(BASE + '/api/patients/import/zappy', { method: 'POST', body: fd, headers: { cookie: admin.header() }, redirect: 'manual' })
+        return { status: res.status, data: await res.json().catch(() => null) }
+      }
+      const jp = await joanaUp(false)
+      check('a shared name without client Nº is flagged in the preview', jp.data?.counts?.['clients.ambiguousName'] === 1 && jp.data?.problems?.some((x) => /2 patients are called/.test(x.detail)), JSON.stringify(jp.data?.counts))
+      await joanaUp(true)
+      await joanaUp(true)
+      await joanaUp(true)
+      const joanas = (await db.query("select count(*)::int as n, count(*) filter (where external_id like 'zappy:n:%')::int as keyed from patients where first_name='Joana' and last_name='Lopes'")).rows[0]
+      const joanaAppts = (await db.query("select count(*)::int as n from appointments a join patients p on p.id=a.patient_id where p.first_name='Joana' and p.last_name='Lopes'")).rows[0].n
+      check('…importing it three times makes one new record with its 2 bookings (not one per round)', joanas.n === 3 && joanas.keyed === 1 && joanaAppts === 2, JSON.stringify({ joanas, joanaAppts }))
       const again = await markUp(true)
       check('uploading the same MARKINGS files again changes nothing', again.status === 200 && (again.data.counts['bookings.created'] ?? 0) === 0 && (again.data.counts['bookings.updated'] ?? 0) === 0 && (await db.query("select count(*)::int as n from waitlist_entries w join patients p on p.id=w.patient_id where p.external_id='zappy:501' and w.notes like 'Lista de espera no Zappy%'")).rows[0].n === 1, JSON.stringify(again.data?.counts))
     }

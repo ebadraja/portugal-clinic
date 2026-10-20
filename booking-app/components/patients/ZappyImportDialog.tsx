@@ -284,13 +284,14 @@ export function ZappyImportDialog({ open, onClose, onImported }: { open: boolean
                   {n(preview, "bookings.rejected") > 0 && <span className="text-red-700"> · {n(preview, "bookings.rejected")} rejected</span>}
                   {" · "}{Object.entries(preview.bookingStatuses).map(([k, v]) => `${v} ${k === "NO_SHOW" ? "no-show" : k.toLowerCase()}`).join(", ")}
                 </p>
-                {(n(preview, "bookings.waitlist") + n(preview, "bookings.personalTime") + n(preview, "bookings.skippedStaff") + n(preview, "bookings.duplicateRow")) > 0 && (
+                {(n(preview, "bookings.waitlist") + n(preview, "bookings.personalTime") + n(preview, "bookings.skippedStaff") + n(preview, "bookings.duplicateRow") + n(preview, "clients.createdFromBooking")) > 0 && (
                   <p className="text-xs text-muted-foreground">
                     {[
                       n(preview, "bookings.waitlist") ? `${n(preview, "bookings.waitlist")} on Zappy's waiting list (upcoming ones join the CRM waiting list)` : "",
                       n(preview, "bookings.personalTime") ? `${n(preview, "bookings.personalTime")} personal time (not imported — use Block time)` : "",
                       n(preview, "bookings.skippedStaff") ? `${n(preview, "bookings.skippedStaff")} in columns set to “Don't import”` : "",
                       n(preview, "bookings.duplicateRow") ? `${n(preview, "bookings.duplicateRow")} repeated (same booking in two files or twice in Zappy)` : "",
+                      n(preview, "clients.createdFromBooking") ? `${n(preview, "clients.createdFromBooking")} patient(s) only in the appointment files${n(preview, "clients.ambiguousName") ? ` — ${n(preview, "clients.ambiguousName")} of them share a name with existing patients (see rows to look at)` : ""}` : "",
                     ].filter(Boolean).join(" · ")}
                   </p>
                 )}

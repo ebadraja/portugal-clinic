@@ -390,17 +390,24 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
       }
       if (!duration || duration <= 0 || duration > 720) duration = typeCfg?.durationMinutes ?? 30
 
-      // Patient: Zappy client id → phone + name → unique name → create a minimal record
+      // Patient: Zappy client id → phone + name → the record an earlier round made for this name →
+      // unique name → create a minimal record. A record made here always gets a key (zappy:<nr>, or
+      // zappy:n:<name hash> without a Nº), so later rounds and re-uploads find it instead of making
+      // another one — even when the name is shared by several patients.
       const zcid = pick(rec, cols, 'clientId')
       const rawPhone = pick(rec, cols, 'phone')
       const phone = rawPhone ? phoneE164(rawPhone) : null
       const nm = splitName(clientName)
+      const nameKey = clientName ? `zappy:n:${createHash('sha1').update(norm(clientName)).digest('hex').slice(0, 16)}` : null
       let patient: P | undefined = zcid ? byExternal.get(`zappy:${zcid}`) : undefined
       if (!patient && phone) patient = (byPhone.get(phoneKey(phone)!) ?? []).find((p) => sameName(p, nm))
+      if (!patient && !zcid && nameKey) patient = byExternal.get(nameKey)
+      let ambiguous = 0
       if (!patient && clientName) {
         // Only an unambiguous name: two patients called the same are never guessed between.
         const same = byName.get(norm(clientName)) ?? []
         if (same.length === 1) patient = same[0]
+        else ambiguous = same.length
       }
       if (!patient) {
         if (!clientName) {
@@ -409,8 +416,12 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
           continue
         }
         bump('clients.createdFromBooking')
-        const data = { firstName: titleCase(nm.firstName), lastName: titleCase(nm.lastName), phone, externalId: zcid ? `zappy:${zcid}` : null }
-        note({ file, row: rowNo, entity: 'patient', externalId: data.externalId ?? '', name: clientName, action: 'create', detail: 'client only found in the bookings file' })
+        if (ambiguous) bump('clients.ambiguousName')
+        const data = { firstName: titleCase(nm.firstName), lastName: titleCase(nm.lastName), phone, externalId: zcid ? `zappy:${zcid}` : nameKey }
+        note({
+          file, row: rowNo, entity: 'patient', externalId: data.externalId ?? '', name: clientName, action: 'create',
+          detail: ambiguous ? `${ambiguous} patients are called "${clientName}" and the booking has no client Nº — booked under one new record; merge it with the right patient` : 'client only found in the bookings file',
+        })
         let id = `planned-${++tempSeq}`
         if (COMMIT) {
           const created = await prisma.patient.create({ data: { ...data, status: 'ACTIVE', createdById: author.id } })

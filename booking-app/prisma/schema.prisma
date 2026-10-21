@@ -725,6 +725,12 @@ model Settings {
   // when true, booking/lookup tools refuse and the agent is told to transfer or take a callback.
   voiceToolsPaused  Boolean @default(false) @map("voice_tools_paused")
   voiceAgentName    String  @default("Acácia") @map("voice_agent_name")
+  // Vapi API access (docs/voice/vapi-transient-agent-plan.md). The private key is encrypted
+  // (lib/crypto.ts) and never returned to the browser.
+  vapiApiKey        String?   @map("vapi_api_key")
+  vapiAssistantId   String?   @map("vapi_assistant_id")
+  vapiPhoneNumberId String?   @map("vapi_phone_number_id")
+  vapiLastSync      DateTime? @map("vapi_last_sync")
   voiceProvider     String  @default("11labs") @map("voice_provider")
   voiceId           String? @map("voice_id")
   greetingMessage   String? @map("greeting_message") @db.Text

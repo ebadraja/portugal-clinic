@@ -10,7 +10,7 @@ import prisma from '@/lib/prisma'
 import { getClinicSettings } from '@/lib/clinic/settings'
 import { appBaseUrl } from '@/lib/auth/passwordTokens'
 import { STRUCTURED_OUTPUT_NAME, STRUCTURED_OUTPUT_SCHEMA } from '@/lib/voice/contract'
-import { buildTransientAssistant } from '@/lib/voice/transientAssistant'
+import { buildTransientAssistant, transferTarget } from '@/lib/voice/transientAssistant'
 import { type AssistantSnapshot, type VapiConfig, snapshotOf, vapiErrorMessage, vapiFetch } from '@/lib/voice/vapiApi'
 
 export type SetupStep = { step: string; ok: boolean; detail: string }
@@ -28,7 +28,7 @@ export async function runVapiSetup(cfg: VapiConfig, now = new Date()): Promise<{
   if (cfg.assistantId) {
     const a = await vapiFetch<{ name?: string; voice?: unknown; transcriber?: unknown; model?: unknown }>(`/assistant/${encodeURIComponent(cfg.assistantId)}`, cfg.apiKey)
     if (a.ok && a.json) {
-      snapshot = snapshotOf(a.json)
+      snapshot = { ...snapshotOf(a.json), phoneNumber: cfg.snapshot?.phoneNumber ?? null }
       await prisma.settings.updateMany({ data: { vapiAssistantSnapshot: snapshot as object } })
       steps.push({ step: 'Voice', ok: true, detail: `Copied from "${a.json.name ?? cfg.assistantId}".` })
     } else {
@@ -37,6 +37,20 @@ export async function runVapiSetup(cfg: VapiConfig, now = new Date()): Promise<{
   } else {
     steps.push({ step: 'Voice', ok: true, detail: 'No saved assistant set — using the default Portuguese voice (pt-PT Raquel).' })
   }
+
+  // 1b. The number Vapi answers: a transfer to that same number would ring Acácia again
+  if (cfg.phoneNumberId) {
+    const p = await vapiFetch<{ number?: string }>(`/phone-number/${encodeURIComponent(cfg.phoneNumberId)}`, cfg.apiKey)
+    if (p.ok && p.json?.number) {
+      snapshot = { ...(snapshot ?? {}), phoneNumber: p.json.number }
+      await prisma.settings.updateMany({ data: { vapiAssistantSnapshot: snapshot as object } })
+    }
+  }
+  const clinicSettings = await getClinicSettings()
+  const target = transferTarget(clinicSettings, snapshot)
+  steps.push(target
+    ? { step: 'Transfer', ok: true, detail: `"Falar com alguém" transfers to ${target} (Settings → AI Voice Agent → transfer number).` }
+    : { step: 'Transfer', ok: false, detail: 'The transfer number is missing or is the same number Vapi answers (it would ring Acácia again). Transfers are off — callers get a callback. Set the reception line in Settings → AI Voice Agent.' })
 
   // 2. Structured output
   let soId = cfg.structuredOutputId
@@ -58,7 +72,7 @@ export async function runVapiSetup(cfg: VapiConfig, now = new Date()): Promise<{
   }
 
   // 3. Preview assistant = exactly what a call would get right now
-  const settings = await getClinicSettings()
+  const settings = clinicSettings
   const built = buildTransientAssistant({ settings, now, baseUrl: appBaseUrl(), webhookSecret: secret, snapshot, structuredOutputId: soId })
   const previewBody = { ...built, name: PREVIEW_NAME }
   let pv = cfg.previewAssistantId

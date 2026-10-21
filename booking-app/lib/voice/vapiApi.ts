@@ -43,6 +43,8 @@ export type AssistantSnapshot = {
   voice?: Record<string, unknown>
   transcriber?: Record<string, unknown>
   model?: { provider?: string; model?: string; temperature?: number; maxTokens?: number }
+  /** E.164 number Vapi answers (the clinic line), so a transfer never rings Acácia again. */
+  phoneNumber?: string | null
 }
 
 export type VapiConfig = {

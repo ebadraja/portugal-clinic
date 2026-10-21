@@ -775,6 +775,43 @@ async function main() {
       const again = await markUp(true)
       check('uploading the same MARKINGS files again changes nothing', again.status === 200 && (again.data.counts['bookings.created'] ?? 0) === 0 && (again.data.counts['bookings.updated'] ?? 0) === 0 && (await db.query("select count(*)::int as n from waitlist_entries w join patients p on p.id=w.patient_id where p.external_id='zappy:501' and w.notes like 'Lista de espera no Zappy%'")).rows[0].n === 1, JSON.stringify(again.data?.counts))
     }
+    // Vapi assistant-request: the CRM decides who answers an inbound call
+    {
+      const ask = (secret) => vapi({ message: { type: 'assistant-request', call: { id: `ar-${Date.now()}`, customer: { number: '+351912000111' } } } }, secret)
+      const unsigned = await ask('wrong-secret')
+      check('assistant-request without the secret is refused', unsigned.status === 401)
+      const none = await (await ask()).json()
+      check('…nothing configured: a spoken apology instead of silence', typeof none.error === 'string' && none.error.length > 10, JSON.stringify(none))
+      await db.query("update settings set vapi_assistant_id='saved-acacia-123', vapi_transient_enabled=false")
+      const saved = await (await ask()).json()
+      check('…switch off: the saved assistant answers (exactly today’s Acácia)', saved.assistantId === 'saved-acacia-123' && !saved.assistant, JSON.stringify(saved))
+      await db.query(`update settings set vapi_transient_enabled=true, vapi_structured_output_id='so-123', vapi_assistant_snapshot='{"voice":{"provider":"11labs","voiceId":"voz-acacia"},"transcriber":{"provider":"deepgram","model":"nova-2","language":"pt-PT"},"model":{"provider":"openai","model":"gpt-4o"}}'`)
+      const t0 = Date.now()
+      const built = await (await ask()).json()
+      const ms = Date.now() - t0
+      const a = built.assistant ?? {}
+      const tools = a.model?.tools ?? []
+      const fn = tools.filter((t) => t.type === 'function')
+      check('…switch on: a CRM-built assistant, well inside Vapi’s 7.5 s', !!a.firstMessage && ms < 3000, `${ms} ms`)
+      check('…it greets with the clinic, says it is virtual and that the call may be recorded', /assistente virtual/.test(a.firstMessage) && /gravada/.test(a.firstMessage), a.firstMessage)
+      check('…keeps the saved voice and transcriber', a.voice?.voiceId === 'voz-acacia' && a.transcriber?.language === 'pt-PT', JSON.stringify({ v: a.voice, t: a.transcriber }))
+      check('…10 CRM tools signed with the webhook secret, plus transfer and end call', fn.length === 10 && fn.every((t) => t.server?.url?.endsWith('/api/webhooks/vapi') && t.server?.headers?.['x-vapi-secret'] === 'itest-vapi-secret') && tools.some((t) => t.type === 'transferCall') && tools.some((t) => t.type === 'endCall'), JSON.stringify(tools.map((t) => t.function?.name ?? t.type)))
+      check('…structured output attached; no legacy analysis plan', a.artifactPlan?.structuredOutputIds?.[0] === 'so-123' && !a.analysisPlan, JSON.stringify(a.artifactPlan))
+      const prompt = a.model?.messages?.[0]?.content ?? ''
+      check('…the prompt carries live clinic data and no template tags', /Hoje é /.test(prompt) && /A clínica está (aberta|fechada)/.test(prompt) && !prompt.includes('{{'), prompt.slice(0, 200))
+      const preview = await admin.json('/api/settings/vapi/assistant')
+      check('admin preview shows the same assistant with the secret masked', preview.status === 200 && preview.data.tools?.length === 12 && !JSON.stringify(preview.data).includes('itest-vapi-secret'), JSON.stringify(preview.data?.tools))
+      const vs = await admin.json('/api/settings/vapi')
+      check('Vapi settings never return the key', vs.status === 200 && !('apiKey' in vs.data) && vs.data.transientEnabled === true && vs.data.webhookSecretSet === true, JSON.stringify(vs.data))
+      const off = await admin.json('/api/settings/vapi', { method: 'PUT', body: { transientEnabled: false } })
+      const after = await (await ask()).json()
+      check('switching it off in Settings hands calls straight back to the saved assistant', off.status === 200 && after.assistantId === 'saved-acacia-123', JSON.stringify(after).slice(0, 120))
+      // A Vapi structured output (new format) is read at the end of the call
+      const soCall = `so-call-${Date.now()}`
+      const eoc = await vapi({ message: { type: 'end-of-call-report', call: { id: soCall, type: 'inboundPhoneCall', customer: { number: '+351966111222' } }, endedReason: 'customer-ended-call', artifact: { transcript: 'AI: Olá\nUser: Quero falar com alguém', messages: [{ role: 'assistant', message: 'Olá' }, { role: 'user', message: 'Quero falar com alguém' }], structuredOutputs: { 'so-123': { name: 'acacia_call_result', result: { call_outcome: 'TRANSFERRED', caller_intent: 'ROUTING' } } } } } })
+      const cl = (await db.query('select outcome::text as outcome, intent::text as intent from call_logs where vapi_call_id=$1', [soCall])).rows[0]
+      check('end-of-call reads Vapi structured outputs', eoc.status === 201 && cl?.outcome === 'TRANSFERRED' && cl?.intent === 'ROUTING', JSON.stringify(cl))
+    }
     const agendaPage = await admin.req('/appointments?agenda=1')
     check('/appointments?agenda=1 renders (200)', agendaPage.status === 200, String(agendaPage.status))
   }

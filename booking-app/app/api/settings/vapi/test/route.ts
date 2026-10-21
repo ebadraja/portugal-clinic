@@ -34,7 +34,7 @@ export async function POST() {
     if (cfg.assistantId) {
       const a = await vapiFetch<Assistant>(`/assistant/${encodeURIComponent(cfg.assistantId)}`, cfg.apiKey)
       // Keep a copy of how Acácia sounds, so the CRM-built assistant uses the same voice and transcriber.
-      if (a.ok && a.json) await prisma.settings.updateMany({ data: { vapiAssistantSnapshot: snapshotOf(a.json) as object } })
+      if (a.ok && a.json) await prisma.settings.updateMany({ data: { vapiAssistantSnapshot: { ...snapshotOf(a.json), phoneNumber: cfg.snapshot?.phoneNumber ?? null } as object } })
       checks.push(a.ok
         ? { label: "Assistant", ok: true, detail: `"${a.json?.name ?? cfg.assistantId}" · ${a.json?.model?.provider ?? "?"}/${a.json?.model?.model ?? "?"} · voice ${a.json?.voice?.provider ?? "?"} ${a.json?.voice?.voiceId ?? ""} · transcriber ${a.json?.transcriber?.provider ?? "?"} ${a.json?.transcriber?.model ?? ""} ${a.json?.transcriber?.language ?? ""}`.trim() }
         : { label: "Assistant", ok: false, detail: a.status === 404 ? "No assistant with this ID in the workspace of this key." : vapiErrorMessage(a, "Could not read the assistant") })
@@ -44,6 +44,10 @@ export async function POST() {
 
     if (cfg.phoneNumberId) {
       const p = phones.find((x) => x.id === cfg.phoneNumberId)
+      if (p?.number) {
+        const fresh = await prisma.settings.findFirst({ select: { vapiAssistantSnapshot: true } })
+        await prisma.settings.updateMany({ data: { vapiAssistantSnapshot: { ...((fresh?.vapiAssistantSnapshot as object | null) ?? {}), phoneNumber: p.number } } })
+      }
       checks.push(p
         ? { label: "Phone number", ok: true, detail: `${p.number || p.name || p.id} · ${p.assistantId ? `answered by assistant ${assistants.find((a) => a.id === p.assistantId)?.name ?? p.assistantId}` : p.serverUrl ? `asks ${p.serverUrl} for its assistant` : "no assistant set"}` }
         : { label: "Phone number", ok: false, detail: "No phone number with this ID in the workspace of this key." })

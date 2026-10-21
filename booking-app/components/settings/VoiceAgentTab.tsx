@@ -10,6 +10,7 @@ import { useToast } from "@/components/toast-provider";
 import { LoadState, ReadOnlyNotice, SectionCard, StatusIcon, hintCls, inputCls, labelCls, sendJson, useIsAdmin, useJson } from "@/components/settings/shared";
 import { useClinicSettings, useDraft } from "@/components/settings/use-clinic-settings";
 import { VapiConnectionCard } from "@/components/settings/VapiConnectionCard";
+import { VapiAssistantCard } from "@/components/settings/VapiAssistantCard";
 
 type VoiceStatus = {
   paused: boolean;
@@ -121,6 +122,7 @@ export function VoiceAgentTab() {
       {!isAdmin && <ReadOnlyNotice />}
 
       {isAdmin && <VapiConnectionCard />}
+      {isAdmin && <VapiAssistantCard />}
 
       <SectionCard
         title="Voice agent status"

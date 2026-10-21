@@ -38,6 +38,14 @@ export type BuildInput = {
   callerKnown?: boolean
 }
 
+/** The transfer target, or null when there is none or it is the number Vapi itself answers (a loop). */
+export function transferTarget(settings: ClinicSettings, snapshot?: AssistantSnapshot | null): string | null {
+  const n = toE164(settings.voiceAgent.transferPhone || settings.practice.phone)
+  if (!n) return null
+  if (snapshot?.phoneNumber && toE164(snapshot.phoneNumber) === n) return null
+  return n
+}
+
 // ── Defaults used only when the saved assistant could not be read ──
 const DEFAULT_VOICE = { provider: 'azure', voiceId: 'pt-PT-RaquelNeural' }
 const DEFAULT_TRANSCRIBER = { provider: 'deepgram', model: 'nova-2', language: 'pt-PT' }
@@ -97,6 +105,7 @@ export function buildSystemPrompt(input: BuildInput): string {
   const types = s.appointmentTypes.filter((t) => t.active).map((t) => `${t.type} = ${t.label} (${t.durationMinutes} minutos)`)
   const accepted = s.insurers.accepted
   const notAccepted = s.insurers.notAccepted
+  const canTransfer = !!transferTarget(s, input.snapshot)
   const confirmationText = s.flags.reminders
     ? 'O paciente recebe uma mensagem de confirmação e um lembrete antes da consulta.'
     : 'Não prometas mensagens de confirmação: a clínica ainda não as envia por este sistema.'
@@ -117,7 +126,7 @@ export function buildSystemPrompt(input: BuildInput): string {
 1. Identidade primeiro. Antes de falares de qualquer consulta, ou de dizeres se alguém é paciente, pedes o nome completo e a data de nascimento e usas lookup_patient. Sem confirmação, não dás nenhuma informação pessoal. Se a ferramenta disser que não confirma, segue a indicação dela.
 2. Novos pacientes não são marcados por ti. Recolhes o nome, o melhor contacto e o motivo, e usas create_callback_request com is_new_patient verdadeiro. Explicas que a equipa confirma a disponibilidade e liga de volta.
 3. Não dás conselhos clínicos, diagnósticos, nem indicações sobre medicação. Dizes com simpatia que isso é avaliado pelo médico dentista em consulta.
-4. Urgências. Dor forte, inchaço, dente partido, traumatismo ou hemorragia: se a clínica estiver aberta, usas transfer_to_human e transferes a chamada; se estiver fechada, usas create_callback_request com urgency "urgent" e dizes que a equipa contacta logo que possível. Se houver dificuldade em respirar ou engolir, inchaço que alastra para o olho ou o pescoço, hemorragia que não para, ou febre alta com inchaço, dizes claramente para ligar já para o 112 ou ir às urgências do hospital.
+4. Urgências. Dor forte, inchaço, dente partido, traumatismo ou hemorragia: ${canTransfer ? 'se a clínica estiver aberta, usas transfer_to_human e transferes a chamada; se estiver fechada,' : 'em qualquer caso'} usas create_callback_request com urgency "urgent" e dizes que a equipa contacta logo que possível. Se houver dificuldade em respirar ou engolir, inchaço que alastra para o olho ou o pescoço, hemorragia que não para, ou febre alta com inchaço, dizes claramente para ligar já para o 112 ou ir às urgências do hospital.
 5. Preços, seguros, pagamentos e políticas só a partir das ferramentas (answer_question, verify_insurance). Quando falares de preços, acrescenta sempre que o valor exato de um tratamento só é definido depois da consulta de avaliação. Nunca inventes.
 6. Horários de consulta só a partir de check_availability. Nunca prometas um horário sem o confirmares com a ferramenta e sem a marcação ficar feita.
 7. Se te perguntarem se és uma pessoa, dizes que és a assistente virtual da clínica. Se a pessoa preferir falar com alguém, ajudas de imediato (regra de transferência abaixo).
@@ -145,7 +154,9 @@ Antes de cada resposta verifica em silêncio: vou dar um conselho clínico? Vou 
 4. Desmarcar: confirma a identidade e qual a consulta, usa cancel_appointment e oferece logo uma nova data. A clínica pede aviso com vinte e quatro horas de antecedência; se a ferramenta indicar que é tarde, explica com simpatia.
 5. Novo paciente: segue a regra 2.
 6. Informações: answer_question para preços, pagamentos, localização e políticas; verify_insurance para seguros; get_opening_hours para horários e encerramentos.
-7. Falar com alguém, ou algo que não consegues resolver: usa transfer_to_human com o motivo. Se a resposta disser para transferir, diz apenas "Vou passar a chamada, um momento." e usa transfer_call. Se a clínica estiver fechada, oferece um pedido de chamada.
+${canTransfer
+    ? '7. Falar com alguém, ou algo que não consegues resolver: usa transfer_to_human com o motivo. Se a resposta disser para transferir, diz apenas "Vou passar a chamada, um momento." e usa transfer_call. Se a clínica estiver fechada, oferece um pedido de chamada.'
+    : '7. Falar com alguém, ou algo que não consegues resolver: não é possível transferir chamadas. Usa create_callback_request com o motivo e diz que a equipa liga de volta (com urgency "urgent" se for urgente).'}
 8. Fecho: pergunta se pode ajudar em mais alguma coisa. Quando não houver mais nada, despede-te ("Obrigada pela sua chamada, ${greetingFor(now, s.timezone)}.") e usa end_call.
 
 # Exemplos
@@ -186,7 +197,7 @@ const WAIT_MESSAGES: Record<string, string> = {
   create_callback_request: 'Um momento, vou registar o pedido.',
 }
 
-export function buildTools(input: Pick<BuildInput, 'settings' | 'baseUrl' | 'webhookSecret'>): Json[] {
+export function buildTools(input: Pick<BuildInput, 'settings' | 'baseUrl' | 'webhookSecret' | 'snapshot'>): Json[] {
   const server = { url: `${input.baseUrl}/api/webhooks/vapi`, timeoutSeconds: 20, headers: { 'x-vapi-secret': input.webhookSecret } }
   const crmTools: Json[] = TOOL_DEFINITIONS.map((t) => ({
     type: 'function',
@@ -197,7 +208,7 @@ export function buildTools(input: Pick<BuildInput, 'settings' | 'baseUrl' | 'web
       { type: 'request-failed', content: 'Peço desculpa, tive um problema técnico. Posso pedir à receção que lhe ligue de volta.' },
     ],
   }))
-  const transferNumber = toE164(input.settings.voiceAgent.transferPhone || input.settings.practice.phone)
+  const transferNumber = transferTarget(input.settings, input.snapshot)
   const transfer: Json[] = transferNumber
     ? [{
         type: 'transferCall',
@@ -241,12 +252,28 @@ export function buildTransientAssistant(input: BuildInput): Json {
     // Inbound clinic line: never a voicemail on the other side; the clinic is a quiet room.
     voicemailDetection: 'off',
     backgroundSound: 'off',
+    // Callers ring from cafés and cars: Krisp removes background voices and noise.
+    backgroundSpeechDenoisingPlan: { smartDenoisingPlan: { enabled: true } },
     maxDurationSeconds: 600,
-    silenceTimeoutSeconds: 30,
     // Portuguese callers pause while saying dates of birth and phone numbers: wait a little longer on numbers.
     startSpeakingPlan: { waitSeconds: 0.6, transcriptionEndpointingPlan: { onPunctuationSeconds: 0.1, onNoPunctuationSeconds: 1.2, onNumberSeconds: 0.9 } },
     stopSpeakingPlan: { numWords: 2, voiceSeconds: 0.3, backoffSeconds: 1 },
-    messagePlan: { idleMessages: ['Ainda está em linha?', 'Consegue ouvir-me?'], idleMessageMaxSpokenCount: 2, idleTimeoutSeconds: 8 },
+    // Silence: check in after 8 s (at most twice); after 30 s of silence say goodbye and hang up.
+    hooks: [
+      {
+        on: 'customer.speech.timeout',
+        options: { timeoutSeconds: 8, triggerMaxCount: 2, triggerResetMode: 'onUserSpeech' },
+        do: [{ type: 'say', exact: ['Ainda está em linha?', 'Consegue ouvir-me?'] }],
+      },
+      {
+        on: 'customer.speech.timeout',
+        options: { timeoutSeconds: 30, triggerMaxCount: 1 },
+        do: [
+          { type: 'say', exact: 'Como não a consigo ouvir, vou terminar a chamada. Se precisar, ligue-nos de novo. Obrigada.' },
+          { type: 'tool', tool: { type: 'endCall' } },
+        ],
+      },
+    ],
     endCallMessage: 'Obrigada pela sua chamada. Até breve.',
     artifactPlan: {
       recordingEnabled: true,

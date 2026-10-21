@@ -51,10 +51,6 @@ const DEFAULT_VOICE = { provider: 'azure', voiceId: 'pt-PT-RaquelNeural' }
 const DEFAULT_TRANSCRIBER = { provider: 'deepgram', model: 'nova-2', language: 'pt-PT' }
 const DEFAULT_MODEL = { provider: 'openai', model: 'gpt-4o', temperature: 0.3, maxTokens: 300 }
 
-const WEEKDAYS_PT: Record<string, string> = {
-  Monday: 'segunda-feira', Tuesday: 'terça-feira', Wednesday: 'quarta-feira', Thursday: 'quinta-feira', Friday: 'sexta-feira', Saturday: 'sábado', Sunday: 'domingo',
-}
-
 /** "bom dia" until 13:00, "boa tarde" until 20:00, then "boa noite" (clinic time). */
 export function greetingFor(now: Date, timeZone: string): 'bom dia' | 'boa tarde' | 'boa noite' {
   const m = utcToZoned(now, timeZone).minutes
@@ -99,7 +95,6 @@ export function buildSystemPrompt(input: BuildInput): string {
   const clinic = s.practice.name
   const open = isOpenNow(s, now)
   const reopen = open ? null : nextOpening(s, now)
-  const weekday = WEEKDAYS_PT[new Intl.DateTimeFormat('en-US', { timeZone: s.timezone, weekday: 'long' }).format(now)] ?? ''
   const closures = upcomingClosures(s, now)
   const dentists = activeProviders(s).map((p) => `${p.name}${p.title ? ` (${p.title})` : ''}`)
   const types = s.appointmentTypes.filter((t) => t.active).map((t) => `${t.type} = ${t.label} (${t.durationMinutes} minutos)`)
@@ -136,7 +131,7 @@ export function buildSystemPrompt(input: BuildInput): string {
 Antes de cada resposta verifica em silêncio: vou dar um conselho clínico? Vou falar de uma consulta sem identidade confirmada? Vou dizer um preço ou horário que nenhuma ferramenta me deu? Se sim, corrige antes de falar.
 
 # Contexto desta chamada
-- Hoje é ${weekday}, ${formatDateLong(now, s.timezone, s.locale)}, e são ${formatTime(now, s.timezone, s.locale)} em Lisboa.
+- Hoje é ${formatDateLong(now, s.timezone, s.locale)}, e são ${formatTime(now, s.timezone, s.locale)} em Lisboa.
 - A clínica está ${open ? 'aberta neste momento' : `fechada neste momento${reopen ? `; reabre ${reopen}` : ''}`}.
 - Horário: ${hoursSummary(s)}${closures.length ? `\n- Próximos encerramentos: ${closures.join('; ')}.` : ''}
 - Morada: ${s.practice.address}. Telefone da clínica: ${s.practice.phone}.
@@ -172,7 +167,7 @@ ${agent}: Fica então marcada a higiene para quinta-feira, dia trinta, às dez e
 
 Exemplo 2, novo paciente:
 Pessoa: Nunca fui aí, queria uma consulta.
-${agent}: Seja bem-vinda. Para novos pacientes, a equipa confirma a disponibilidade e liga-lhe de volta. Pode dizer-me o seu nome completo?
+${agent}: Com todo o gosto. Para novos pacientes, a equipa confirma a disponibilidade e liga-lhe de volta. Pode dizer-me o seu nome completo?
 
 Exemplo 3, urgência com a clínica fechada:
 Pessoa: Estou com muita dor e a cara inchada.
@@ -269,7 +264,7 @@ export function buildTransientAssistant(input: BuildInput): Json {
         on: 'customer.speech.timeout',
         options: { timeoutSeconds: 30, triggerMaxCount: 1 },
         do: [
-          { type: 'say', exact: 'Como não a consigo ouvir, vou terminar a chamada. Se precisar, ligue-nos de novo. Obrigada.' },
+          { type: 'say', exact: 'Como não estou a ouvir nada, vou terminar a chamada. Se precisar, ligue-nos de novo. Obrigada.' },
           { type: 'tool', tool: { type: 'endCall' } },
         ],
       },

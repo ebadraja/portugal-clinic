@@ -4,6 +4,7 @@ import { recordWebhookEvent } from "@/lib/voice/webhookLog"
 import { processVapiEndOfCall, type VapiArtifact, type VapiCall, type VapiEndOfCallReport, type VapiMessage, type VapiAnalysis } from "@/lib/voice/endOfCall"
 import { runVoiceTool, type ToolContext } from "@/lib/voice/tools"
 import { getClinicSettings } from "@/lib/clinic/settings"
+import { answerAssistantRequest } from "@/lib/voice/assistantRequest"
 
 export const dynamic = "force-dynamic"
 
@@ -54,6 +55,13 @@ export async function POST(request: NextRequest) {
   const call = payload?.call as VapiCall | undefined
   const callId = call?.id ?? (typeof payload?.sessionId === "string" ? payload.sessionId : null)
   console.log(`[vapi] event=${type} call=${callId ?? "-"}`)
+
+  // ── Inbound call on a number without a fixed assistant: the CRM decides who answers ──
+  if (type === "assistant-request") {
+    const answer = await answerAssistantRequest(call?.customer?.number ?? null)
+    recordWebhookEvent({ eventType: type, callId, outcome: answer.kind === "error" ? "error" : "processed", reason: answer.kind })
+    return NextResponse.json(answer.body)
+  }
 
   // ── End of a call / web conversation ───────────────────────────────────────
   if (type === "conversation-update" || type === "end-of-call-report") {

@@ -101,7 +101,7 @@ function bookingRefusal(r: BookingFailure): string {
 
 const voiceActor = (ctx: ToolContext): Actor => ({ kind: 'VOICE_AGENT', callId: ctx.callId })
 
-function hoursSummary(settings: ClinicSettings): string {
+export function hoursSummary(settings: ClinicSettings): string {
   const pt: Record<string, string> = {
     Monday: 'segunda', Tuesday: 'terça', Wednesday: 'quarta', Thursday: 'quinta', Friday: 'sexta', Saturday: 'sábado', Sunday: 'domingo',
   }
@@ -114,7 +114,7 @@ function hoursSummary(settings: ClinicSettings): string {
   return `${parts.join('; ')}${lunch}.`
 }
 
-function isOpenNow(settings: ClinicSettings, now: Date): boolean {
+export function isOpenNow(settings: ClinicSettings, now: Date): boolean {
   const z = utcToZoned(now, settings.timezone)
   if (closureOn(z.date, settings.holidays)) return false
   const h = hoursFor(z.date, settings.businessHours)

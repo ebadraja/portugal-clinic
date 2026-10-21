@@ -731,6 +731,14 @@ model Settings {
   vapiAssistantId   String?   @map("vapi_assistant_id")
   vapiPhoneNumberId String?   @map("vapi_phone_number_id")
   vapiLastSync      DateTime? @map("vapi_last_sync")
+  // CRM-built (transient) assistant: when on, inbound calls get the assistant the CRM builds per
+  // call (lib/voice/transientAssistant.ts); when off, the saved assistant above answers.
+  vapiTransientEnabled   Boolean @default(false) @map("vapi_transient_enabled")
+  // Voice / transcriber / model of the saved assistant, copied when the connection is tested, so
+  // the CRM-built assistant sounds the same. JSON: { voice, transcriber, model }
+  vapiAssistantSnapshot  Json?   @map("vapi_assistant_snapshot")
+  vapiStructuredOutputId String? @map("vapi_structured_output_id")
+  vapiPreviewAssistantId String? @map("vapi_preview_assistant_id")
   voiceProvider     String  @default("11labs") @map("voice_provider")
   voiceId           String? @map("voice_id")
   greetingMessage   String? @map("greeting_message") @db.Text

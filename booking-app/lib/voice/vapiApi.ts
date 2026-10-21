@@ -38,11 +38,64 @@ export function vapiErrorMessage(result: VapiResult, fallback: string): string {
   return `${fallback} (HTTP ${result.status})`
 }
 
-export type VapiConfig = { apiKey: string; assistantId: string | null; phoneNumberId: string | null; lastSync: Date | null }
+/** Voice, transcriber and model of the saved assistant (copied so the CRM-built one sounds the same). */
+export type AssistantSnapshot = {
+  voice?: Record<string, unknown>
+  transcriber?: Record<string, unknown>
+  model?: { provider?: string; model?: string; temperature?: number; maxTokens?: number }
+}
+
+export type VapiConfig = {
+  apiKey: string
+  assistantId: string | null
+  phoneNumberId: string | null
+  lastSync: Date | null
+  transientEnabled: boolean
+  snapshot: AssistantSnapshot | null
+  structuredOutputId: string | null
+  previewAssistantId: string | null
+}
 
 /** Vapi connection from Settings, key decrypted. */
 export async function getVapiConfig(): Promise<VapiConfig | null> {
-  const s = await prisma.settings.findFirst({ select: { vapiApiKey: true, vapiAssistantId: true, vapiPhoneNumberId: true, vapiLastSync: true } })
+  const s = await prisma.settings.findFirst({
+    select: {
+      vapiApiKey: true, vapiAssistantId: true, vapiPhoneNumberId: true, vapiLastSync: true, vapiTransientEnabled: true, vapiAssistantSnapshot: true,
+      vapiStructuredOutputId: true, vapiPreviewAssistantId: true,
+    },
+  })
   if (!s) return null
-  return { apiKey: s.vapiApiKey ? decrypt(s.vapiApiKey) : '', assistantId: s.vapiAssistantId, phoneNumberId: s.vapiPhoneNumberId, lastSync: s.vapiLastSync }
+  return {
+    apiKey: s.vapiApiKey ? decrypt(s.vapiApiKey) : '',
+    assistantId: s.vapiAssistantId,
+    phoneNumberId: s.vapiPhoneNumberId,
+    lastSync: s.vapiLastSync,
+    transientEnabled: s.vapiTransientEnabled,
+    snapshot: (s.vapiAssistantSnapshot as AssistantSnapshot | null) ?? null,
+    structuredOutputId: s.vapiStructuredOutputId,
+    previewAssistantId: s.vapiPreviewAssistantId,
+  }
+}
+
+/** Keep only what decides how the assistant sounds and hears (never credentials or ids of other resources). */
+export function snapshotOf(a: { voice?: unknown; transcriber?: unknown; model?: unknown } | null): AssistantSnapshot | null {
+  if (!a) return null
+  const strip = (o: unknown): Record<string, unknown> | undefined => {
+    if (!o || typeof o !== 'object') return undefined
+    const { credentialId: _c, apiKey: _k, ...rest } = o as Record<string, unknown>
+    void _c
+    void _k
+    return rest
+  }
+  const m = (a.model ?? {}) as Record<string, unknown>
+  return {
+    voice: strip(a.voice),
+    transcriber: strip(a.transcriber),
+    model: {
+      provider: typeof m.provider === 'string' ? m.provider : undefined,
+      model: typeof m.model === 'string' ? m.model : undefined,
+      temperature: typeof m.temperature === 'number' ? m.temperature : undefined,
+      maxTokens: typeof m.maxTokens === 'number' ? m.maxTokens : undefined,
+    },
+  }
 }

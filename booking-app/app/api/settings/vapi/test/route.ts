@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireStaff } from "@/lib/auth/guards"
-import { getVapiConfig, vapiErrorMessage, vapiFetch } from "@/lib/voice/vapiApi"
+import prisma from "@/lib/prisma"
+import { getVapiConfig, snapshotOf, vapiErrorMessage, vapiFetch } from "@/lib/voice/vapiApi"
 
 export const dynamic = "force-dynamic"
 
@@ -32,6 +33,8 @@ export async function POST() {
 
     if (cfg.assistantId) {
       const a = await vapiFetch<Assistant>(`/assistant/${encodeURIComponent(cfg.assistantId)}`, cfg.apiKey)
+      // Keep a copy of how Acácia sounds, so the CRM-built assistant uses the same voice and transcriber.
+      if (a.ok && a.json) await prisma.settings.updateMany({ data: { vapiAssistantSnapshot: snapshotOf(a.json) as object } })
       checks.push(a.ok
         ? { label: "Assistant", ok: true, detail: `"${a.json?.name ?? cfg.assistantId}" · ${a.json?.model?.provider ?? "?"}/${a.json?.model?.model ?? "?"} · voice ${a.json?.voice?.provider ?? "?"} ${a.json?.voice?.voiceId ?? ""} · transcriber ${a.json?.transcriber?.provider ?? "?"} ${a.json?.transcriber?.model ?? ""} ${a.json?.transcriber?.language ?? ""}`.trim() }
         : { label: "Assistant", ok: false, detail: a.status === 404 ? "No assistant with this ID in the workspace of this key." : vapiErrorMessage(a, "Could not read the assistant") })

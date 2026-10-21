@@ -139,7 +139,10 @@ export const TOOL_NAMES = TOOL_DEFINITIONS.map((t) => t.name)
 /** Legacy tool names still answered safely if an old assistant config calls them. */
 export const LEGACY_TOOL_NAMES = ['submit_refill_request', 'send_intake_forms'] as const
 
-// ─── Structured output (Vapi analysisPlan.structuredDataSchema) ──────────────
+// ─── Structured output (Vapi structured output "acacia_call_result", or the legacy analysis plan) ─
+
+/** Name of the Vapi structured output the CRM creates (Settings → Vapi → Set up). */
+export const STRUCTURED_OUTPUT_NAME = 'acacia_call_result'
 
 export const CALL_OUTCOMES = ['BOOKED', 'RESCHEDULED', 'CANCELLED', 'CALLBACK_REQUESTED', 'TRANSFERRED', 'INFO_PROVIDED', 'VOICEMAIL', 'HUNG_UP'] as const
 export const CALL_INTENTS = ['APPOINTMENT_BOOKING', 'CANCELLATION', 'INQUIRY', 'EMERGENCY', 'COMPLAINT', 'ROUTING', 'GENERAL'] as const

@@ -13,7 +13,7 @@
 import prisma from '@/lib/prisma'
 import { Prisma } from '@/lib/generated/prisma/client'
 import { phoneKey } from '@/lib/clinic/phone'
-import { parseStructuredData, toCallOutcomeEnum, type ParsedStructured } from '@/lib/voice/contract'
+import { STRUCTURED_OUTPUT_NAME, parseStructuredData, toCallOutcomeEnum, type ParsedStructured } from '@/lib/voice/contract'
 
 // ─── Payload types ────────────────────────────────────────────────────────────
 
@@ -27,7 +27,25 @@ export interface VapiCall {
   metadata?: Record<string, unknown>
 }
 export interface VapiMessage { role: 'user' | 'assistant' | 'system' | 'bot' | 'tool'; content?: string; message?: string; time?: number; secondsFromStart?: number }
-export interface VapiArtifact { messages?: VapiMessage[]; transcript?: string; recordingUrl?: string; stereoRecordingUrl?: string }
+export interface VapiArtifact {
+  messages?: VapiMessage[]
+  transcript?: string
+  recordingUrl?: string
+  stereoRecordingUrl?: string
+  /** Vapi structured outputs, keyed by output id: { name, result } (result null = extraction failed). */
+  structuredOutputs?: Record<string, { name?: string; result?: unknown } | null>
+}
+
+/**
+ * The call's structured data: the CRM's structured output (by name) when present, else the first
+ * object-shaped one, else the legacy analysis plan's structuredData.
+ */
+export function pickStructuredData(report: Pick<VapiEndOfCallReport, 'artifact' | 'analysis'>): unknown {
+  const outputs = Object.values(report.artifact?.structuredOutputs ?? {}).filter((o): o is { name?: string; result?: unknown } => !!o)
+  const ours = outputs.find((o) => o.name === STRUCTURED_OUTPUT_NAME && o.result && typeof o.result === 'object')
+  const anyObject = outputs.find((o) => o.result && typeof o.result === 'object')
+  return ours?.result ?? anyObject?.result ?? report.analysis?.structuredData
+}
 export interface VapiAnalysis { summary?: string; structuredData?: Record<string, unknown>; successEvaluation?: string }
 export interface VapiEndOfCallReport {
   type: 'end-of-call-report'
@@ -204,7 +222,7 @@ export async function processVapiEndOfCall(
   const summary = report.analysis?.summary ?? report.summary ?? ''
   const recordingUrl = report.artifact?.recordingUrl ?? report.recordingUrl ?? null
   const mapped = mapMessages(rawMessages)
-  const structured = parseStructuredData(report.analysis?.structuredData)
+  const structured = parseStructuredData(pickStructuredData(report))
 
   const visitorName = call.customer?.name ?? null
   const visitorPhone = call.customer?.number ?? null

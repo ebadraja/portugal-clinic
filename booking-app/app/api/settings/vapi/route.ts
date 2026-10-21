@@ -7,11 +7,29 @@ import { ensureSettingsRow } from "@/lib/clinic/settingsWrite"
 
 export const dynamic = "force-dynamic"
 
-const SELECT = { vapiApiKey: true, vapiAssistantId: true, vapiPhoneNumberId: true, vapiLastSync: true } as const
+const SELECT = {
+  vapiApiKey: true, vapiAssistantId: true, vapiPhoneNumberId: true, vapiLastSync: true, vapiTransientEnabled: true, vapiAssistantSnapshot: true,
+  vapiStructuredOutputId: true, vapiPreviewAssistantId: true,
+} as const
 
-function shape(s: { vapiApiKey: string | null; vapiAssistantId: string | null; vapiPhoneNumberId: string | null; vapiLastSync: Date | null } | null) {
+type Row = {
+  vapiApiKey: string | null; vapiAssistantId: string | null; vapiPhoneNumberId: string | null; vapiLastSync: Date | null; vapiTransientEnabled: boolean
+  vapiAssistantSnapshot: unknown; vapiStructuredOutputId: string | null; vapiPreviewAssistantId: string | null
+}
+
+function shape(s: Row | null) {
   // Never send the key to the browser, in any form.
-  return { hasApiKey: !!s?.vapiApiKey, assistantId: s?.vapiAssistantId ?? "", phoneNumberId: s?.vapiPhoneNumberId ?? "", lastSync: s?.vapiLastSync ?? null }
+  return {
+    hasApiKey: !!s?.vapiApiKey,
+    assistantId: s?.vapiAssistantId ?? "",
+    phoneNumberId: s?.vapiPhoneNumberId ?? "",
+    lastSync: s?.vapiLastSync ?? null,
+    transientEnabled: s?.vapiTransientEnabled ?? false,
+    voiceCopied: !!s?.vapiAssistantSnapshot,
+    structuredOutputId: s?.vapiStructuredOutputId ?? "",
+    previewAssistantId: s?.vapiPreviewAssistantId ?? "",
+    webhookSecretSet: !!process.env.VAPI_WEBHOOK_SECRET?.trim(),
+  }
 }
 
 // ── GET /api/settings/vapi — connection status (admin) ────────────────────────
@@ -28,7 +46,9 @@ export async function GET() {
 }
 
 const Id = z.string().trim().max(80).regex(/^[A-Za-z0-9-]*$/, "That ID doesn't look like a Vapi ID (letters, numbers and dashes)")
-const Put = z.object({ apiKey: z.string().trim().max(200).optional(), clearApiKey: z.boolean().optional(), assistantId: Id.optional(), phoneNumberId: Id.optional() }).strict()
+const Put = z
+  .object({ apiKey: z.string().trim().max(200).optional(), clearApiKey: z.boolean().optional(), assistantId: Id.optional(), phoneNumberId: Id.optional(), transientEnabled: z.boolean().optional() })
+  .strict()
 
 // ── PUT /api/settings/vapi — save (admin, audited without the key). Blank apiKey keeps the stored one. ──
 
@@ -39,18 +59,25 @@ export async function PUT(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid data" }, { status: 400 })
   const b = parsed.data
   if (b.apiKey && b.apiKey.length < 20) return NextResponse.json({ error: "That doesn't look like a Vapi private API key" }, { status: 400 })
+  if (b.transientEnabled && !process.env.VAPI_WEBHOOK_SECRET?.trim()) {
+    return NextResponse.json({ error: "VAPI_WEBHOOK_SECRET is not set on the server, so Vapi's requests would be refused." }, { status: 400 })
+  }
   try {
     const { id } = await ensureSettingsRow()
     const data: Record<string, unknown> = { vapiLastSync: new Date() }
     if (b.clearApiKey) data.vapiApiKey = null
     else if (b.apiKey) data.vapiApiKey = encrypt(b.apiKey)
-    if (b.assistantId !== undefined) data.vapiAssistantId = b.assistantId || null
+    if (b.assistantId !== undefined) {
+      data.vapiAssistantId = b.assistantId || null
+      data.vapiAssistantSnapshot = null // re-copied from the new assistant on the next test / setup
+    }
     if (b.phoneNumberId !== undefined) data.vapiPhoneNumberId = b.phoneNumberId || null
+    if (b.transientEnabled !== undefined) data.vapiTransientEnabled = b.transientEnabled
     const s = await prisma.settings.update({ where: { id }, data, select: SELECT })
     await prisma.auditLog.create({
       data: {
         userId: guard.user.id, action: "UPDATE", entity: "settings", entityId: "vapi",
-        changes: { keyChanged: !!b.apiKey || !!b.clearApiKey, assistantId: s.vapiAssistantId, phoneNumberId: s.vapiPhoneNumberId },
+        changes: { keyChanged: !!b.apiKey || !!b.clearApiKey, assistantId: s.vapiAssistantId, phoneNumberId: s.vapiPhoneNumberId, transientEnabled: s.vapiTransientEnabled },
         ...requestMeta(req), timestamp: new Date(),
       },
     })

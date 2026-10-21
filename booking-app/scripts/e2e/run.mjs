@@ -746,6 +746,32 @@ async function main() {
       const joanas = (await db.query("select count(*)::int as n, count(*) filter (where external_id like 'zappy:n:%')::int as keyed from patients where first_name='Joana' and last_name='Lopes'")).rows[0]
       const joanaAppts = (await db.query("select count(*)::int as n from appointments a join patients p on p.id=a.patient_id where p.first_name='Joana' and p.last_name='Lopes'")).rows[0].n
       check('…importing it three times makes one new record with its 2 bookings (not one per round)', joanas.n === 3 && joanas.keyed === 1 && joanaAppts === 2, JSON.stringify({ joanas, joanaAppts }))
+      // Merge: the record made from the booking goes into the right Joana; nothing comes back on re-import
+      {
+        const { createHash } = require('node:crypto')
+        const fold = (x) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+        const made = (await db.query("select id, external_id from patients where first_name='Joana' and last_name='Lopes' and external_id like 'zappy:n:%'")).rows[0]
+        const bookingsList = await admin.json('/api/patients/directory?check=bookings&limit=100')
+        check('"Made from a Zappy booking" lists the record to merge', bookingsList.data.data?.some((x) => x.id === made?.id), JSON.stringify(bookingsList.data.data?.map((x) => x.name)))
+        const cands = await admin.json(`/api/patients/${made.id}/merge`)
+        check('merge suggests both patients with the same name', ['itest-joana-1', 'itest-joana-2'].every((id) => cands.data.candidates?.some((c) => c.id === id && c.reasons.includes('same name'))), JSON.stringify(cands.data))
+        await admin.json(`/api/patients/${made.id}/notes`, { method: 'POST', body: { content: 'Nota no registo da marcação' } })
+        // The right Joana already has one of the two bookings: it must be kept once, not doubled
+        const dupKey = 'zappy:h:' + createHash('sha1').update(`itest-joana-1|${f2}|11:00|${fold('Primeira consulta')}`).digest('hex').slice(0, 12)
+        await db.query("insert into appointments (id, patient_id, start_time, end_time, duration, type, status, external_id, reason, updated_at) values ('itest-joana-dup', 'itest-joana-1', $1::timestamp, $1::timestamp + interval '30 minutes', 30, 'EVALUATION', 'CONFIRMED', $2, 'Primeira consulta', now())", [`${f2} 11:00`, dupKey])
+        const self = await admin.json(`/api/patients/${made.id}/merge`, { method: 'POST', body: { intoId: made.id } })
+        check('merging a record into itself is refused (400)', self.status === 400)
+        const mg = await admin.json(`/api/patients/${made.id}/merge`, { method: 'POST', body: { intoId: 'itest-joana-1' } })
+        check('merge moves the bookings, drops the one both had, and the note', mg.status === 200 && mg.data.appointments === 1 && mg.data.duplicateAppointmentsDropped === 1 && mg.data.notes === 1, JSON.stringify(mg.data))
+        const after = (await db.query("select (select count(*)::int from patients where id=$1) gone, (select count(*)::int from appointments where patient_id='itest-joana-1') appts, (select count(*)::int from patient_notes where patient_id='itest-joana-1') notes, (select patient_id from patient_aliases where external_id=$2) alias", [made.id, made.external_id])).rows[0]
+        check('…the extra record is gone; the kept one has 2 bookings, the notes and an alias', after.gone === 0 && after.appts === 2 && after.notes === 2 && after.alias === 'itest-joana-1', JSON.stringify(after))
+        const reimp = await joanaUp(true)
+        const joanasNow = (await db.query("select count(*)::int as n from patients where first_name='Joana' and last_name='Lopes'")).rows[0].n
+        const joana1Appts = (await db.query("select count(*)::int as n from appointments where patient_id='itest-joana-1'")).rows[0].n
+        check('re-importing after the merge creates nothing and finds the kept record', reimp.status === 200 && (reimp.data.counts['bookings.created'] ?? 0) === 0 && joanasNow === 2 && joana1Appts === 2, JSON.stringify({ c: reimp.data.counts, joanasNow, joana1Appts }))
+        const viewerTry = await admin.json('/api/patients/itest-joana-2/merge', { method: 'POST', body: { intoId: 'itest-joana-1' } })
+        check('admin can merge two plain records too', viewerTry.status === 200, JSON.stringify(viewerTry.data))
+      }
       const again = await markUp(true)
       check('uploading the same MARKINGS files again changes nothing', again.status === 200 && (again.data.counts['bookings.created'] ?? 0) === 0 && (again.data.counts['bookings.updated'] ?? 0) === 0 && (await db.query("select count(*)::int as n from waitlist_entries w join patients p on p.id=w.patient_id where p.external_id='zappy:501' and w.notes like 'Lista de espera no Zappy%'")).rows[0].n === 1, JSON.stringify(again.data?.counts))
     }

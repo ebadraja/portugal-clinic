@@ -355,6 +355,20 @@ type ClientCols = ColumnMap<typeof CLIENT_COLUMNS>
  * without it the key is the name + Zappy's creation time — which never changes for a record,
  * so uploading the same export again updates instead of duplicating.
  */
+/** Key of a patient made from a booking that has no client Nº (stable across imports and merges). */
+export function nameKey(fullName: string): string | null {
+  const n = norm(fullName)
+  return n ? `zappy:n:${createHash('sha1').update(n).digest('hex').slice(0, 16)}` : null
+}
+
+/**
+ * Key of an imported booking (the MARKINGS export has no booking id): who it is for, when, and the
+ * service. `identity` is the patient's externalId, or its id when it has none.
+ */
+export function bookingKey(identity: string, date: string, time: string, service: string): string {
+  return `zappy:h:${createHash('sha1').update(`${identity}|${date}|${time}|${norm(service)}`).digest('hex').slice(0, 12)}`
+}
+
 export function clientKey(nr: string, fullName: string, createdOn: string): string | null {
   if (nr.trim()) return `zappy:${nr.trim()}`
   if (!createdOn.trim() || !norm(fullName)) return null

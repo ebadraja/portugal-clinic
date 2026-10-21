@@ -36,14 +36,14 @@ type Row = {
 
 type Counts = {
   all: number; active: number; seen12: number; lost: number; potential: number; new: number; recallDue: number
-  missingDob: number; missingPhone: number; nameToCheck: number; possibleDuplicates: number
+  missingDob: number; missingPhone: number; nameToCheck: number; possibleDuplicates: number; fromBookings?: number
 }
 type Summary = { counts: Counts; tags: { tag: string; count: number }[]; recallMonths: number }
 
 /** Everyday views */
 type View = "all" | "seen12" | "recall" | "lost" | "new"
 /** "Needs attention" views */
-type Attention = "potential" | "missing-phone" | "missing-dob" | "name" | "duplicates"
+type Attention = "potential" | "missing-phone" | "missing-dob" | "name" | "duplicates" | "bookings"
 
 const ATTENTION: { id: Attention; label: string; hint: string; count: (c: Counts) => number }[] = [
   { id: "potential", label: "No visits on record", hint: "In Zappy but never had an appointment there (often enquiries or old contacts)", count: (c) => c.potential },
@@ -51,6 +51,7 @@ const ATTENTION: { id: Attention; label: string; hint: string; count: (c: Counts
   { id: "missing-dob", label: "No date of birth", hint: "Acácia can only recognise them by their caller ID", count: (c) => c.missingDob },
   { id: "name", label: "Names to check", hint: "No surname, or a name that is a number or symbols", count: (c) => c.nameToCheck },
   { id: "duplicates", label: "Possible duplicates", hint: "Share a phone number or NIF with another record", count: (c) => c.possibleDuplicates },
+  { id: "bookings", label: "Made from a Zappy booking", hint: "The booking had no client Nº and several patients share the name — open each and merge it into the right patient", count: (c) => c.fromBookings ?? 0 },
 ]
 
 const AVATAR = ["bg-blue-100 text-blue-800", "bg-emerald-100 text-emerald-800", "bg-amber-100 text-amber-800", "bg-violet-100 text-violet-800", "bg-rose-100 text-rose-800", "bg-sky-100 text-sky-800"]
@@ -113,6 +114,7 @@ export function PatientDirectory({ refreshKey }: { refreshKey: number }) {
       if (attention === "missing-dob") p.set("missing", "dob")
       if (attention === "name") p.set("check", "name")
       if (attention === "duplicates") p.set("check", "duplicates")
+      if (attention === "bookings") p.set("check", "bookings")
     } else {
       if (view === "seen12") p.set("lifecycle", "seen12")
       if (view === "lost") p.set("lifecycle", "lost")

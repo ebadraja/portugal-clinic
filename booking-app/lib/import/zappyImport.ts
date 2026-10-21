@@ -8,7 +8,6 @@
  * `complete: false` — calling it again with the same files continues where it stopped (rows
  * already imported are recognised as unchanged), which keeps each web request short.
  */
-import { createHash } from 'node:crypto'
 import prisma from '@/lib/prisma'
 import type { AppointmentStatus, AppointmentType, Prisma } from '@/lib/generated/prisma/client'
 import { APPOINTMENT_TYPE_KEYS, getClinicSettings } from '@/lib/clinic/settings'
@@ -17,7 +16,7 @@ import { phoneKey } from '@/lib/clinic/phone'
 import { encrypt } from '@/lib/crypto'
 import { csvRecords, decodeCsvBytes } from '@/lib/import/csv'
 import {
-  BOOKING_COLUMNS, CLIENT_COLUMNS, SKIP_STAFF, type ZappyMap, detectDateOrder, guessProviderId, guessType, isPersonalTime, isWaitingList,
+  BOOKING_COLUMNS, CLIENT_COLUMNS, SKIP_STAFF, type ZappyMap, bookingKey, detectDateOrder, nameKey as nameKeyOf, guessProviderId, guessType, isPersonalTime, isWaitingList,
   mapClientRow, mapService, mapStaff, mapStatus, norm, parseDate, parseDuration, parseTime, phoneE164, pick, resolveColumns, splitName, titleCase,
 } from '@/lib/import/zappy'
 import { createAppointment, setAppointmentStatus } from '@/lib/appointments/booking'
@@ -140,6 +139,12 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
     }
   }
   existing.forEach(index)
+  // Records merged into another patient: their old identities lead to the patient they joined.
+  const byId = new Map(existing.map((p) => [p.id, p]))
+  for (const a of await prisma.patientAlias.findMany({ select: { externalId: true, patientId: true } })) {
+    const p = byId.get(a.patientId)
+    if (p && !byExternal.has(a.externalId)) byExternal.set(a.externalId, p)
+  }
   const sameName = (a: { firstName: string; lastName: string }, b: { firstName: string; lastName: string }) =>
     norm(a.firstName).split(' ')[0] === norm(b.firstName).split(' ')[0] && norm(a.lastName).split(' ').at(-1) === norm(b.lastName).split(' ').at(-1)
 
@@ -398,7 +403,7 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
       const rawPhone = pick(rec, cols, 'phone')
       const phone = rawPhone ? phoneE164(rawPhone) : null
       const nm = splitName(clientName)
-      const nameKey = clientName ? `zappy:n:${createHash('sha1').update(norm(clientName)).digest('hex').slice(0, 16)}` : null
+      const nameKey = clientName ? nameKeyOf(clientName) : null
       let patient: P | undefined = zcid ? byExternal.get(`zappy:${zcid}`) : undefined
       if (!patient && phone) patient = (byPhone.get(phoneKey(phone)!) ?? []).find((p) => sameName(p, nm))
       if (!patient && !zcid && nameKey) patient = byExternal.get(nameKey)
@@ -434,7 +439,7 @@ export async function runZappyImport(input: ImportInput): Promise<ImportResult> 
       const bid = pick(rec, cols, 'id')
       const externalId = bid
         ? `zappy:${bid}`
-        : `zappy:h:${createHash('sha1').update(`${patient.externalId ?? patient.id}|${d.date}|${start}|${norm(service)}`).digest('hex').slice(0, 12)}`
+        : bookingKey(patient.externalId ?? patient.id, d.date, start, service)
       base.externalId = externalId
       base.name = `${patient.firstName} ${patient.lastName}`.trim()
       if (seen.has(externalId)) {

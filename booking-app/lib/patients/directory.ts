@@ -20,6 +20,8 @@ export type DirectoryQuery = {
   missing?: 'dob' | 'phone' | 'email' | null
   /** Restrict to these ids (resolved from SQL-only checks: names to check, possible duplicates). */
   ids?: string[] | null
+  /** Records the Zappy appointment import made for a booking without client Nº (to merge). */
+  fromBookings?: boolean
   providerName?: string | null
   sort?: 'name' | 'lastVisit' | 'created'
   page?: number
@@ -76,6 +78,7 @@ export function directoryWhere(q: DirectoryQuery, opts: { now: Date; recallMonth
       break
   }
   if (q.ids) and.push({ id: { in: q.ids } })
+  if (q.fromBookings) and.push({ externalId: { startsWith: 'zappy:n:' } })
   if (q.tag) and.push({ tags: { has: q.tag } })
   if (q.recallDue) and.push(upcomingNone, { lastVisitAt: { lt: monthsAgo(opts.recallMonths, now) } }, { OR: [{ recallSnoozedUntil: null }, { recallSnoozedUntil: { lt: now } }] })
   if (q.upcoming === 'yes') and.push(upcomingSome)
@@ -193,12 +196,12 @@ export async function directoryCounts(opts: { now?: Date; recallMonths: number }
   const now = opts.now ?? new Date()
   const count = (q: DirectoryQuery) => prisma.patient.count({ where: directoryWhere(q, { now, recallMonths: opts.recallMonths }) })
   const [nameIds, dupIds] = await Promise.all([idsWithNameToCheck(), idsPossibleDuplicates()])
-  const [all, active, seen12, lost, potential, fresh, recall, missingDob, missingPhone] = await Promise.all([
+  const [all, active, seen12, lost, potential, fresh, recall, missingDob, missingPhone, fromBookings] = await Promise.all([
     count({}), count({ lifecycle: 'active' }), count({ lifecycle: 'seen12' }), count({ lifecycle: 'lost' }), count({ lifecycle: 'potential' }), count({ lifecycle: 'new' }),
-    count({ recallDue: true }), count({ missing: 'dob' }), count({ missing: 'phone' }),
+    count({ recallDue: true }), count({ missing: 'dob' }), count({ missing: 'phone' }), count({ fromBookings: true }),
   ])
   return {
     all, active, seen12, lost, potential, new: fresh, recallDue: recall, missingDob, missingPhone,
-    nameToCheck: nameIds.length, possibleDuplicates: dupIds.length,
+    nameToCheck: nameIds.length, possibleDuplicates: dupIds.length, fromBookings,
   }
 }

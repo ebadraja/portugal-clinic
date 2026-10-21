@@ -123,5 +123,5 @@ export function phoneLabel(raw: string): string {
 export function zappyNumber(externalId: string | null): string | null {
   if (!externalId?.startsWith("zappy:")) return null
   const rest = externalId.slice(6)
-  return /^(c|h|next):/.test(rest) ? null : rest
+  return /^(c|h|n|next):/.test(rest) ? null : rest
 }

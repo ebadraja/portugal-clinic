@@ -10,7 +10,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import {
-  AlertTriangle, ArrowLeft, CalendarCheck, CalendarPlus, Check, FileText, HeartPulse, Loader2, Mail, MoreHorizontal, NotebookPen, Phone,
+  AlertTriangle, ArrowLeft, CalendarCheck, CalendarPlus, Check, FileText, HeartPulse, Loader2, Mail, MoreHorizontal, NotebookPen, Phone, Users,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PatientGdprActions } from "@/components/patients/gdpr-actions"
@@ -20,6 +20,7 @@ import { NotesPanel } from "./NotesPanel"
 import { AppointmentsList, splitAppointments } from "./AppointmentsList"
 import { CommsPanel } from "./CommsPanel"
 import { DetailsPanel, TagsCard, contactFields, medicalFields } from "./DetailsPanel"
+import { MergeDialog } from "./MergeDialog"
 import { STATUS_STYLE, ageFrom, fmtDate, fmtDateTime, phoneLabel, zappyNumber, type ClinicOptions, type PatientRecordData } from "./types"
 
 type Tab = "overview" | "appointments" | "notes" | "comms" | "details"
@@ -34,6 +35,8 @@ export function PatientRecord({ patientId, initialTab }: { patientId: string; in
   const session = useSession().data
   const role = session?.user?.role
   const canEdit = role === "ADMIN" || role === "STAFF"
+  const isAdmin = role === "ADMIN"
+  const [mergeOpen, setMergeOpen] = useState(false)
   const [patient, setPatient] = useState<PatientRecordData | null>(null)
   const [missing, setMissing] = useState(false)
   const [options, setOptions] = useState<ClinicOptions | null>(null)
@@ -122,6 +125,7 @@ export function PatientRecord({ patientId, initialTab }: { patientId: string; in
   recallBefore.setMonth(recallBefore.getMonth() - recallMonths)
   const recallDue = !next && !!lastSeen && new Date(lastSeen) < recallBefore
   const zappyNo = zappyNumber(patient.externalId)
+  const fromBooking = !!patient.externalId?.startsWith("zappy:n:")
   const book = () => router.push(`/appointments?agenda=1&patient=${encodeURIComponent(patient.id)}`)
   const values = patient as unknown as Record<string, unknown>
 
@@ -195,6 +199,9 @@ export function PatientRecord({ patientId, initialTab }: { patientId: string; in
                   <div className="fixed inset-0 z-30" onClick={() => setMoreOpen(false)} aria-hidden />
                   <div role="menu" className="absolute right-0 z-40 mt-1 grid w-64 gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
                     <button role="menuitem" onClick={() => { setMoreOpen(false); setTab("details") }} className="rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800">Edit details</button>
+                    {isAdmin && (
+                      <button role="menuitem" onClick={() => { setMoreOpen(false); setMergeOpen(true) }} className="rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800">Merge with another record…</button>
+                    )}
                     <div className="border-t border-slate-100 pt-2 dark:border-slate-800"><PatientGdprActions patientId={patient.id} fullName={name} /></div>
                   </div>
                 </>
@@ -202,6 +209,16 @@ export function PatientRecord({ patientId, initialTab }: { patientId: string; in
             </div>
           </div>
         </div>
+
+        {fromBooking && (
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-900">
+            <Users className="h-5 w-5 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <strong>Made from a Zappy booking.</strong> The booking had no client number and other patients have this name, so its appointments were kept here. Merge it into the right patient.
+            </span>
+            {isAdmin && <Button size="sm" onClick={() => setMergeOpen(true)}>Find the right patient</Button>}
+          </div>
+        )}
 
         {(alerts.length > 0 || recallDue) && (
           <div className="mt-4 flex flex-wrap gap-2">
@@ -218,6 +235,18 @@ export function PatientRecord({ patientId, initialTab }: { patientId: string; in
           </div>
         )}
       </section>
+
+      {isAdmin && (
+        <MergeDialog
+          key={patient.id}
+          open={mergeOpen}
+          onClose={() => setMergeOpen(false)}
+          source={{
+            id: patient.id, name, phone: patient.phone, nif: patient.nif, dateOfBirth: patient.dateOfBirth, zappyNumber: zappyNo, fromBooking,
+            lastVisitAt: lastSeen, appointments: patient.appointments.length, notes: patient.notes.length,
+          }}
+        />
+      )}
 
       {/* ── Tabs ── */}
       <nav role="tablist" aria-label="Patient record" className="sticky top-16 z-20 mt-4 flex gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">

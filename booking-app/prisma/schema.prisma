@@ -426,6 +426,7 @@ model Patient {
   smsOptOuts   SMSOptOut[]
   callbackRequests CallbackRequest[]
   waitlistEntries  WaitlistEntry[]
+  aliases          PatientAlias[]
   appointmentNotifications AppointmentNotification[]
   smsOptOut    Boolean @default(false) @map("sms_opt_out")
   privateMode  Boolean @default(false) @map("private_mode")
@@ -1425,4 +1426,16 @@ model WaitlistEntry {
   @@index([status, fromDate])
   @@index([patientId])
   @@map("waitlist_entries")
+}
+
+// Identities of records merged into this patient (their Zappy client nº, or the name key of a
+// record made from a booking), so later Zappy imports find this patient instead of re-creating them.
+model PatientAlias {
+  externalId String   @id @map("external_id")
+  patientId  String   @map("patient_id")
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([patientId])
+  @@map("patient_aliases")
 }

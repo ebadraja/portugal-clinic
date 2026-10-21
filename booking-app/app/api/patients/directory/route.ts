@@ -9,7 +9,7 @@ const LIFECYCLES = ["new", "active", "lost", "potential", "seen12"] as const
 
 // ── GET /api/patients/directory ───────────────────────────────────────────────
 // ?q=&lifecycle=new|active|lost|potential|seen12&tag=&recall=1&upcoming=yes|no&missing=dob|phone|email
-//  &check=name|duplicates (needs-attention lists)
+//  &check=name|duplicates|bookings (needs-attention lists)
 //  &provider=&sort=name|lastVisit|created&page=&limit=
 
 export async function GET(request: NextRequest) {
@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     if (check === "name") query.ids = await idsWithNameToCheck()
     if (check === "duplicates") query.ids = await idsPossibleDuplicates()
     if (check === "duplicates" && !sp.get("sort")) query.sort = "name"
+    if (check === "bookings") query.fromBookings = true
     const settings = await getClinicSettings()
     return NextResponse.json(await listDirectory(query, { recallMonths: settings.bookingPolicy.recallMonths, timeZone: settings.timezone }))
   } catch (error) {

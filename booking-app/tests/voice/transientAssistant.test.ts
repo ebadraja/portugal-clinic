@@ -69,6 +69,34 @@ describe('CRM-built Vapi assistant', () => {
     expect(fallback.transcriber).toMatchObject({ language: 'pt-PT' })
   })
 
+  it('first test call (22 Oct): an English-only voice and an English-locked transcriber are made Portuguese', () => {
+    const a = buildTransientAssistant({
+      ...base,
+      now: tuesdayMorning,
+      snapshot: {
+        voice: { provider: 'vapi', voiceId: 'Elliot', version: '2' },
+        transcriber: { provider: 'soniox', model: 'stt-rt-v5', language: 'en', languages: ['en'], fallbackPlan: { autoFallback: { enabled: true } } },
+      },
+    })
+    expect(a.voice).toEqual({ provider: 'azure', voiceId: 'pt-PT-RaquelNeural' })
+    expect(a.transcriber).toMatchObject({ provider: 'soniox', model: 'stt-rt-v5', language: 'pt', languages: ['pt', 'en', 'es'], fallbackPlan: { autoFallback: { enabled: true } } })
+    expect((a.transcriber as { customVocabulary: string[] }).customVocabulary).toContain('Acácia')
+    // Azure only counts as Portuguese with a pt-* voice; Deepgram is moved off English.
+    const b = buildTransientAssistant({ ...base, now: tuesdayMorning, snapshot: { voice: { provider: 'azure', voiceId: 'en-US-JennyNeural' }, transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' } } })
+    expect(b.voice).toEqual({ provider: 'azure', voiceId: 'pt-PT-RaquelNeural' })
+    expect(b.transcriber).toMatchObject({ provider: 'deepgram', language: 'pt-PT' })
+  })
+
+  it('keeps the caller’s language after tools, never assumes gender, asks for a surname before the lookup', () => {
+    const prompt = buildSystemPrompt({ ...base, now: tuesdayMorning })
+    expect(prompt).toMatch(/também depois de usares uma ferramenta/)
+    expect(prompt).not.toMatch(/\("o senhor", "a senhora"/)
+    expect(prompt).toMatch(/"Mr\.", "Mrs\."/)
+    expect(prompt).toMatch(/se a pessoa disser só um nome, pede o outro/)
+    const lookup = (buildTransientAssistant({ ...base, now: tuesdayMorning }).model as { tools: { function?: { name: string }; messages?: { type: string; contents: { language: string }[] }[] }[] }).tools.find((t) => t.function?.name === 'lookup_patient')!
+    expect(lookup.messages!.map((m) => m.contents.map((c) => c.language))).toEqual([['pt', 'en'], ['pt', 'en']])
+  })
+
   it('structured output when set up, legacy analysis plan otherwise', () => {
     const withSo = buildTransientAssistant({ ...base, now: tuesdayMorning, structuredOutputId: 'so-1' })
     expect((withSo.artifactPlan as { structuredOutputIds: string[] }).structuredOutputIds).toEqual(['so-1'])

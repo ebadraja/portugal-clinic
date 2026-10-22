@@ -10,7 +10,7 @@ import prisma from '@/lib/prisma'
 import { getClinicSettings } from '@/lib/clinic/settings'
 import { appBaseUrl } from '@/lib/auth/passwordTokens'
 import { STRUCTURED_OUTPUT_NAME, STRUCTURED_OUTPUT_SCHEMA } from '@/lib/voice/contract'
-import { buildTransientAssistant, transferTarget } from '@/lib/voice/transientAssistant'
+import { buildTransientAssistant, isPortugueseVoice, transferTarget } from '@/lib/voice/transientAssistant'
 import { type AssistantSnapshot, type VapiConfig, snapshotOf, vapiErrorMessage, vapiFetch } from '@/lib/voice/vapiApi'
 
 export type SetupStep = { step: string; ok: boolean; detail: string }
@@ -30,7 +30,10 @@ export async function runVapiSetup(cfg: VapiConfig, now = new Date()): Promise<{
     if (a.ok && a.json) {
       snapshot = { ...snapshotOf(a.json), phoneNumber: cfg.snapshot?.phoneNumber ?? null }
       await prisma.settings.updateMany({ data: { vapiAssistantSnapshot: snapshot as object } })
-      steps.push({ step: 'Voice', ok: true, detail: `Copied from "${a.json.name ?? cfg.assistantId}".` })
+      const v = (snapshot.voice ?? {}) as { provider?: string; voiceId?: string }
+      steps.push(isPortugueseVoice(snapshot.voice)
+        ? { step: 'Voice', ok: true, detail: `Copied from "${a.json.name ?? cfg.assistantId}". The transcriber is set to Portuguese (with English and Spanish).` }
+        : { step: 'Voice', ok: true, detail: `"${a.json.name ?? cfg.assistantId}" uses ${v.voiceId ?? 'a voice'} (${v.provider ?? '?'}), which cannot speak Portuguese — using the Portuguese voice pt-PT Raquel instead. To use your own, pick a Portuguese voice on that assistant in Vapi and press Set up again.` })
     } else {
       steps.push({ step: 'Voice', ok: false, detail: `${vapiErrorMessage(a, 'Could not read the saved assistant')} — using the default Portuguese voice.` })
     }
@@ -81,7 +84,7 @@ export async function runVapiSetup(cfg: VapiConfig, now = new Date()): Promise<{
   if (!pv || !pv.ok) pv = await vapiFetch<{ id: string }>('/assistant', cfg.apiKey, { method: 'POST', body: JSON.stringify(previewBody) })
   if (pv.ok && pv.json?.id) {
     await prisma.settings.updateMany({ data: { vapiPreviewAssistantId: pv.json.id } })
-    steps.push({ step: 'Preview assistant', ok: true, detail: `Vapi accepted the configuration. Test it in Vapi → Assistants → "${PREVIEW_NAME}" → Talk.` })
+    steps.push({ step: 'Preview assistant', ok: true, detail: `Vapi accepted the configuration. Test it in Vapi → Assistants → "${PREVIEW_NAME}" → Talk. The preview's date, time and "open/closed" are frozen at the moment you pressed Set up; real calls are built fresh each time.` })
   } else {
     steps.push({ step: 'Preview assistant', ok: false, detail: vapiErrorMessage(pv, 'Vapi refused the assistant configuration') })
   }

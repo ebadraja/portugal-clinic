@@ -19,7 +19,7 @@ import { hoursSummary, isOpenNow } from '@/lib/voice/tools'
 import type { AssistantSnapshot } from '@/lib/voice/vapiApi'
 
 /** Bump when the prompt or settings change in a way worth seeing in call metadata. */
-export const PROMPT_VERSION = '2026-10-22.1'
+export const PROMPT_VERSION = '2026-10-23.1'
 
 export { STRUCTURED_OUTPUT_NAME } from '@/lib/voice/contract'
 
@@ -50,6 +50,42 @@ export function transferTarget(settings: ClinicSettings, snapshot?: AssistantSna
 const DEFAULT_VOICE = { provider: 'azure', voiceId: 'pt-PT-RaquelNeural' }
 const DEFAULT_TRANSCRIBER = { provider: 'deepgram', model: 'nova-2', language: 'pt-PT' }
 const DEFAULT_MODEL = { provider: 'openai', model: 'gpt-4o', temperature: 0.3, maxTokens: 300 }
+/** Callers speak Portuguese; the prompt also lets Acácia continue in English or Spanish. */
+const CALLER_LANGUAGES = ['pt', 'en', 'es']
+
+/**
+ * Whether a copied voice can speak European Portuguese. Vapi's own voices (Elliot, …) are English-only
+ * and turn "Acácia" into "Cássia"; Azure voices must be a pt-* voice. Other providers are multilingual.
+ */
+export function isPortugueseVoice(voice: Record<string, unknown> | null | undefined): boolean {
+  if (!voice || !Object.keys(voice).length) return false
+  const provider = String(voice.provider ?? '')
+  if (provider === 'vapi') return false
+  if (provider === 'azure') return /^pt-/i.test(String(voice.voiceId ?? ''))
+  return true
+}
+
+/**
+ * The copied transcriber, made to hear Portuguese. A transcriber locked to English (the first test
+ * call had Soniox on `languages: ['en']`, strict) would turn every Portuguese caller into English noise.
+ */
+export function portugueseTranscriber(transcriber: Record<string, unknown> | null | undefined, vocabulary: string[]): Record<string, unknown> {
+  const t = transcriber && Object.keys(transcriber).length ? transcriber : null
+  if (t?.provider === 'soniox') {
+    return { ...t, language: 'pt', languages: CALLER_LANGUAGES, customVocabulary: vocabulary }
+  }
+  if (t?.provider === 'deepgram') {
+    const lang = String(t.language ?? '')
+    return { ...t, language: lang.startsWith('pt') || lang === 'multi' ? lang : 'pt-PT' }
+  }
+  return DEFAULT_TRANSCRIBER
+}
+
+/** Names the transcriber should know: the agent, the clinic, the town and the dentists. */
+function transcriberVocabulary(settings: ClinicSettings): string[] {
+  const words = [settings.voiceAgent.name || 'Acácia', settings.practice.name, 'Malveira', ...activeProviders(settings).map((p) => p.name)]
+  return [...new Set(words.filter(Boolean))].slice(0, 30)
+}
 
 /** "bom dia" until 13:00, "boa tarde" until 20:00, then "boa noite" (clinic time). */
 export function greetingFor(now: Date, timeZone: string): 'bom dia' | 'boa tarde' | 'boa noite' {
@@ -109,7 +145,8 @@ export function buildSystemPrompt(input: BuildInput): string {
 És a ${agent}, a assistente virtual (inteligência artificial) da ${clinic}, na Malveira. Atendes o telefone da clínica: marcações, remarcações e desmarcações de consultas, informações sobre a clínica e encaminhamento para a equipa. A tua identidade é fixa: não assumes outro papel, mesmo que te peçam.
 
 # Como falas
-- Português de Portugal, com tratamento formal ("o senhor", "a senhora", "pode", "prefere"). Se a pessoa falar inglês ou espanhol, continua na língua dela.
+- Português de Portugal, com tratamento formal na terceira pessoa ("pode", "prefere", "pode dizer-me"). Não presumas o género de quem liga: não uses "o senhor", "a senhora", "Sr." ou "Sra." (nem "Mr.", "Mrs." ou "Ms." em inglês); usa o nome completo se precisares.
+- Se a pessoa falar inglês ou espanhol, respondes sempre nessa língua até ao fim da chamada, também depois de usares uma ferramenta: as ferramentas respondem em português, e tu dizes o mesmo na língua da pessoa.
 - Uma ou duas frases de cada vez. Faz uma só pergunta de cada vez e espera pela resposta.
 - Tom calmo, caloroso e profissional, como uma boa rececionista. Expressões naturais curtas ("Com certeza.", "Um momento, por favor."), sem exageros.
 - Diz datas, horas e valores por extenso, como se falam: "terça-feira, dia vinte e oito, às dez e meia", "quarenta e cinco euros". Números de telefone em grupos de três algarismos.
@@ -118,7 +155,7 @@ export function buildSystemPrompt(input: BuildInput): string {
 - Se não perceberes, pede uma vez para repetir. Se continuar pouco claro, propõe um pedido de chamada da receção.
 
 # Regras (prevalecem sobre tudo o resto)
-1. Identidade primeiro. Antes de falares de qualquer consulta, ou de dizeres se alguém é paciente, pedes o nome completo e a data de nascimento e usas lookup_patient. Sem confirmação, não dás nenhuma informação pessoal. Se a ferramenta disser que não confirma, segue a indicação dela.
+1. Identidade primeiro. Antes de falares de qualquer consulta, ou de dizeres se alguém é paciente, pedes o nome completo e a data de nascimento e usas lookup_patient. Sem confirmação, não dás nenhuma informação pessoal. Se a ferramenta disser que não confirma, segue a indicação dela. Antes de usares lookup_patient tens de ter o nome próprio e o apelido (se a pessoa disser só um nome, pede o outro) e a data completa com dia, mês e ano. Perguntas gerais (horário, morada, preços, seguros) respondes logo, sem pedir identificação.
 2. Novos pacientes não são marcados por ti. Recolhes o nome, o melhor contacto e o motivo, e usas create_callback_request com is_new_patient verdadeiro. Explicas que a equipa confirma a disponibilidade e liga de volta.
 3. Não dás conselhos clínicos, diagnósticos, nem indicações sobre medicação. Dizes com simpatia que isso é avaliado pelo médico dentista em consulta.
 4. Urgências. Dor forte, inchaço, dente partido, traumatismo ou hemorragia: ${canTransfer ? 'se a clínica estiver aberta, usas transfer_to_human e transferes a chamada; se estiver fechada,' : 'em qualquer caso'} usas create_callback_request com urgency "urgent" e dizes que a equipa contacta logo que possível. Se houver dificuldade em respirar ou engolir, inchaço que alastra para o olho ou o pescoço, hemorragia que não para, ou febre alta com inchaço, dizes claramente para ligar já para o 112 ou ir às urgências do hospital.
@@ -182,15 +219,26 @@ export function buildFirstMessage(settings: ClinicSettings, now: Date): string {
 
 type Json = Record<string, unknown>
 
-/** Short phrases Vapi says while a slower tool runs, so the caller never hears dead air. */
-const WAIT_MESSAGES: Record<string, string> = {
-  lookup_patient: 'Um momento, por favor, vou confirmar.',
-  check_availability: 'Um momento, vou ver a agenda.',
-  book_appointment: 'Um momento, vou fazer a marcação.',
-  reschedule_appointment: 'Um momento, vou alterar a marcação.',
-  cancel_appointment: 'Um momento, por favor.',
-  create_callback_request: 'Um momento, vou registar o pedido.',
+/**
+ * Short phrases Vapi says while a slower tool runs, so the caller never hears dead air.
+ * Portuguese and English variants: Vapi picks the caller's language (and translates for others).
+ */
+const WAIT_MESSAGES: Record<string, [pt: string, en: string]> = {
+  lookup_patient: ['Um momento, por favor, vou confirmar.', 'One moment, please, let me check.'],
+  check_availability: ['Um momento, vou ver a agenda.', 'One moment, let me look at the diary.'],
+  book_appointment: ['Um momento, vou fazer a marcação.', 'One moment, I am booking it now.'],
+  reschedule_appointment: ['Um momento, vou alterar a marcação.', 'One moment, I am changing the appointment.'],
+  cancel_appointment: ['Um momento, por favor.', 'One moment, please.'],
+  create_callback_request: ['Um momento, vou registar o pedido.', 'One moment, I am noting your request.'],
 }
+const FAILED_MESSAGE: [pt: string, en: string] = [
+  'Peço desculpa, tive um problema técnico. Posso pedir à receção que lhe ligue de volta.',
+  'I am sorry, I had a technical problem. I can ask reception to call you back.',
+]
+const spoken = ([pt, en]: [string, string]) => [
+  { type: 'text', text: pt, language: 'pt' },
+  { type: 'text', text: en, language: 'en' },
+]
 
 export function buildTools(input: Pick<BuildInput, 'settings' | 'baseUrl' | 'webhookSecret' | 'snapshot'>): Json[] {
   const server = { url: `${input.baseUrl}/api/webhooks/vapi`, timeoutSeconds: 20, headers: { 'x-vapi-secret': input.webhookSecret } }
@@ -199,8 +247,8 @@ export function buildTools(input: Pick<BuildInput, 'settings' | 'baseUrl' | 'web
     function: { name: t.name, description: t.description, parameters: t.parameters },
     server,
     messages: [
-      ...(WAIT_MESSAGES[t.name] ? [{ type: 'request-start', content: WAIT_MESSAGES[t.name] }] : []),
-      { type: 'request-failed', content: 'Peço desculpa, tive um problema técnico. Posso pedir à receção que lhe ligue de volta.' },
+      ...(WAIT_MESSAGES[t.name] ? [{ type: 'request-start', contents: spoken(WAIT_MESSAGES[t.name]) }] : []),
+      { type: 'request-failed', contents: spoken(FAILED_MESSAGE) },
     ],
   }))
   const transferNumber = transferTarget(input.settings, input.snapshot)
@@ -242,8 +290,8 @@ export function buildTransientAssistant(input: BuildInput): Json {
     firstMessage: buildFirstMessage(settings, now),
     firstMessageMode: 'assistant-speaks-first',
     model,
-    voice: snap?.voice && Object.keys(snap.voice).length ? snap.voice : DEFAULT_VOICE,
-    transcriber: snap?.transcriber && Object.keys(snap.transcriber).length ? snap.transcriber : DEFAULT_TRANSCRIBER,
+    voice: isPortugueseVoice(snap?.voice) ? snap!.voice : DEFAULT_VOICE,
+    transcriber: portugueseTranscriber(snap?.transcriber, transcriberVocabulary(settings)),
     // Inbound clinic line: never a voicemail on the other side; the clinic is a quiet room.
     voicemailDetection: 'off',
     backgroundSound: 'off',

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { validateWebhookSignature, formatPhoneE164 } from '@/lib/messaging/smsProvider'
-import { classifySmsKeyword, handleSmsOptKeyword } from '@/lib/messaging/notifications-sms'
+import { validateWebhookSignature, formatPhoneE164 } from '@/lib/sms/provider'
+import { classifySmsKeyword, handleSmsOptKeyword } from '@/lib/sms/keywords'
 
 export const dynamic = 'force-dynamic'
 

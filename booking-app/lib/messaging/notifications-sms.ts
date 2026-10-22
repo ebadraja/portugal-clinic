@@ -4,10 +4,10 @@ import {
   createMagicLinkSession,
   hasPendingOtpSession,
 } from '@/lib/messaging/portalAuth'
-import { formatPhoneE164 } from '@/lib/messaging/smsProvider'
+import { formatPhoneE164 } from '@/lib/sms/provider'
 import { getSmsProviderConfig } from '@/lib/messaging/smsSettings'
 import { queueSms } from '@/services/messageQueue'
-import { clearOptOutsForNumber, isPatientOptedOutByAnyRoute } from '@/lib/messaging/optOut'
+import { clearOptOutsForNumber, isPatientOptedOutByAnyRoute } from '@/lib/sms/optOut'
 
 const ACTIVE_SESSION_MS = 5 * 60 * 1000
 

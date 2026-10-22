@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
-import { validateWebhookSignature } from "@/lib/messaging/smsProvider"
+import { validateWebhookSignature } from "@/lib/sms/provider"
 
 export const dynamic = "force-dynamic"
 

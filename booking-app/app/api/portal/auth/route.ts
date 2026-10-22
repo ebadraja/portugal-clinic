@@ -15,7 +15,7 @@ import {
 } from '@/lib/messaging/portalAuth'
 import { portalAuthBody } from '@/lib/messaging/portalSchemas'
 import { getSmsProviderConfig } from '@/lib/messaging/smsSettings'
-import { formatPhoneE164 } from '@/lib/messaging/smsProvider'
+import { formatPhoneE164 } from '@/lib/sms/provider'
 import { recordSmsConsent } from '@/lib/messaging/notifications-sms'
 import { queueSms } from '@/services/messageQueue'
 

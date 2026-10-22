@@ -11,7 +11,7 @@ const m = vi.hoisted(() => {
   return { prisma, optedOut: vi.fn().mockResolvedValue(false) }
 })
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma, default: m.prisma }))
-vi.mock('@/lib/messaging/optOut', () => ({ isPatientOptedOutByAnyRoute: m.optedOut }))
+vi.mock('@/lib/sms/optOut', () => ({ isPatientOptedOutByAnyRoute: m.optedOut }))
 vi.mock('@/lib/email/send', () => ({ sendEmail: vi.fn() }))
 
 import { runDispatch, startFromKey, type Senders } from '@/lib/appointments/dispatch'

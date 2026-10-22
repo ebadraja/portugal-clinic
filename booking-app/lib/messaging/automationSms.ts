@@ -1,12 +1,12 @@
 import prisma from '@/lib/prisma'
-import { formatPhoneE164 } from '@/lib/messaging/smsProvider'
+import { formatPhoneE164 } from '@/lib/sms/provider'
 import { queueSms } from '@/services/messageQueue'
 import { resolveMessagingMergeTags } from '@/lib/messaging/mergeTags'
 import { appendSystemMessage } from '@/lib/messaging/systemMessages'
 import type { MessagingTriggerEvent } from '@/lib/generated/prisma/client'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { buildTriggerKey } from '@/lib/messaging/automationCoordination'
-import { isPatientOptedOutByAnyRoute } from '@/lib/messaging/optOut'
+import { isPatientOptedOutByAnyRoute } from '@/lib/sms/optOut'
 
 export async function getVerifiedPortalPhone(patientId: string): Promise<string | null> {
   const session = await prisma.patientPortalSession.findFirst({

@@ -66,7 +66,7 @@ import {
   sendSMS,
   setTwilioClientForTests,
   maskPhoneForDisplay,
-} from '@/lib/messaging/smsProvider'
+} from '@/lib/sms/provider'
 import {
   classifySmsKeyword,
   handleSmsOptKeyword,
@@ -168,7 +168,7 @@ describe('lib/messaging/smsProvider', () => {
   describe('validateWebhookSignature', () => {
     it('delegates to twilio.validateRequest', async () => {
       m.mockValidateRequest.mockReturnValue(true)
-      const { validateWebhookSignature } = await import('@/lib/messaging/smsProvider')
+      const { validateWebhookSignature } = await import('@/lib/sms/provider')
 
       const form = new FormData()
       form.set('From', '+12534004479')

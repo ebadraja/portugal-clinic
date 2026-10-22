@@ -3,7 +3,7 @@ import { auth } from '@/auth'
 import { Prisma } from '@/lib/generated/prisma/client'
 import prisma from '@/lib/prisma'
 import { messagingSettingsBody } from '@/lib/messaging/settingsSchemas'
-import { maskPhoneForDisplay, getTwilioFromNumber } from '@/lib/messaging/smsProvider'
+import { maskPhoneForDisplay, getTwilioFromNumber } from '@/lib/sms/provider'
 
 export const dynamic = 'force-dynamic'
 

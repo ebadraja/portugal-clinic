@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/auth";
-import {
-  fetchGcalEvents,
-  GCAL_TYPE_LABELS,
-  type ClassifiedGcalEvent,
-} from "@/lib/google-calendar";
 
 const CRM_TYPE_LABELS: Record<string, string> = {
   EVALUATION:   "Evaluation",
@@ -50,7 +45,7 @@ export async function GET(req: NextRequest) {
     const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1), 0, 0, 0, 0);
 
-    const [crmAppts, callLogs, chatCount, emailsSent, activePatients, newPatients] =
+    const [crmAppts, callLogs, messagesSent, activePatients, newPatients] =
       await Promise.all([
         prisma.appointment.findMany({
           where: { startTime: { gte: start, lte: end } },
@@ -60,22 +55,15 @@ export async function GET(req: NextRequest) {
           where: { startTime: { gte: start, lte: end } },
           select: { startTime: true, outcome: true, wasEscalated: true, duration: true },
         }),
-        prisma.chatLog.count({ where: { startTime: { gte: start, lte: end } } }),
-        prisma.emailLog.count({ where: { sentAt: { gte: start, lte: end } } }),
+        // Confirmations and reminders actually sent (lib/appointments/dispatch.ts)
+        prisma.appointmentNotification.groupBy({
+          by: ["channel"],
+          where: { status: "SENT", sentAt: { gte: start, lte: end } },
+          _count: { _all: true },
+        }),
         prisma.patient.count({ where: { status: "ACTIVE" } }),
         prisma.patient.count({ where: { createdAt: { gte: start, lte: end } } }),
       ]);
-
-    // Google Calendar — the practice's real schedule
-    let gcalEvents: ClassifiedGcalEvent[] = [];
-    let gcalConnected = false;
-    try {
-      const gcal = await fetchGcalEvents(start, end);
-      gcalConnected = gcal.connected;
-      gcalEvents = gcal.events.filter((e) => !e.allDay);
-    } catch (e) {
-      console.error("[GET /api/reports/overview] gcal fetch failed", e);
-    }
 
     // ── Time buckets (daily up to 31 days, weekly beyond) ─────────────────────
     const bucketDays = days <= 31 ? 1 : 7;
@@ -111,9 +99,6 @@ export async function GET(req: NextRequest) {
         a.status === "NO_SHOW" || a.status === "CANCELLED",
       );
     }
-    for (const e of gcalEvents) {
-      addAppt(new Date(e.start), GCAL_TYPE_LABELS[e.visitType], e.noShow);
-    }
 
     const outcomeCounts = new Map<string, number>();
     let escalatedCalls = 0;
@@ -134,11 +119,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const totalAppointments = crmAppts.length + gcalEvents.length;
+    const totalAppointments = crmAppts.length;
+    const sentBy = (channel: string) => messagesSent.find((m) => m.channel === channel)?._count._all ?? 0;
 
     return NextResponse.json({
       rangeDays: days,
-      gcalConnected,
       kpis: {
         totalAppointments,
         noShowCount,
@@ -151,8 +136,7 @@ export async function GET(req: NextRequest) {
         avgCallDurationSeconds: durationN > 0 ? Math.round(durationSum / durationN) : 0,
         activePatients,
         newPatients,
-        chatSessions: chatCount,
-        emailsSent,
+        messagesSent: sentBy("SMS") + sentBy("EMAIL"),
       },
       apptsOverTime: buckets.map(({ label, appts, noShows }) => ({ label, appts, noShows })),
       callsOverTime: buckets.map(({ label, calls, escalated }) => ({ label, calls, escalated })),
@@ -169,8 +153,8 @@ export async function GET(req: NextRequest) {
         .sort((a, b) => b.value - a.value),
       engagement: {
         calls: callLogs.length,
-        chats: chatCount,
-        emails: emailsSent,
+        sms: sentBy("SMS"),
+        emails: sentBy("EMAIL"),
       },
     });
   } catch (error) {

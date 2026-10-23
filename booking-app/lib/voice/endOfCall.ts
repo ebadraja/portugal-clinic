@@ -1,8 +1,8 @@
 /**
- * Files a finished Vapi call (end-of-call-report) or web conversation
- * (conversation-update) into the CRM.
+ * Files a finished Vapi call (end-of-call-report) into Call Logs — phone calls and
+ * browser "Talk" calls alike.
  *
- * Outcome precedence for phone calls:
+ * Outcome precedence:
  *   1. What the tools actually did during this call (audited with the call id):
  *      a booking or reschedule ⇒ BOOKED, a cancellation ⇒ CANCELLATION intent,
  *      a callback request ⇒ flagged for follow-up.
@@ -64,7 +64,6 @@ export interface VapiEndOfCallReport {
 type CallIntentType = 'APPOINTMENT_BOOKING' | 'INQUIRY' | 'COMPLAINT' | 'SUPPORT' | 'ROUTING' | 'CANCELLATION' | 'VERIFICATION' | 'EMERGENCY' | 'GENERAL'
 type CallOutcomeType = 'IN_PROGRESS' | 'BOOKED' | 'INFO_PROVIDED' | 'TRANSFERRED' | 'HUNG_UP' | 'VOICEMAIL'
 type SentimentType = 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE'
-type ChatOutcomeType = 'IN_PROGRESS' | 'BOOKED' | 'INFO_PROVIDED' | 'ESCALATED_TO_CALL' | 'LEAD_CAPTURED' | 'ABANDONED'
 
 // ─── Keyword fallbacks (pt + en) ──────────────────────────────────────────────
 
@@ -92,26 +91,6 @@ export function inferSentiment(transcript: string): SentimentType {
   if (/\b(thank you|great|perfect|obrigad[oa]|ótimo|otimo|perfeito|excelente)\b/.test(t)) return 'POSITIVE'
   if (/\b(frustrat|upset|angry|terrible|zangad[oa]|chatead[oa]|péssimo|pessimo|vergonha)\b/.test(t)) return 'NEGATIVE'
   return 'NEUTRAL'
-}
-
-function inferTopic(text: string): 'APPOINTMENT' | 'PRICING' | 'INSURANCE' | 'HOURS' | 'SERVICES' | 'LOCATION' | 'OTHER' {
-  const t = text.toLowerCase()
-  if (/\b(appointment|schedule|book|reschedule|cancel|marcar|consulta|desmarcar)\b/.test(t)) return 'APPOINTMENT'
-  if (/\b(insurance|seguro|advancecare|coverage)\b/.test(t)) return 'INSURANCE'
-  if (/\b(price|cost|fee|preço|preco|custo|pagamento|payment)\b/.test(t)) return 'PRICING'
-  if (/\b(hours|open|close|horário|horario|aberto|fechado)\b/.test(t)) return 'HOURS'
-  if (/\b(location|address|morada|onde|parking|estacionamento)\b/.test(t)) return 'LOCATION'
-  if (/\b(service|treatment|tratamento|implante|ortodontia|higiene|branqueamento)\b/.test(t)) return 'SERVICES'
-  return 'OTHER'
-}
-
-function inferChatOutcome(summary: string, transcript: string, endedReason?: string, messageCount?: number): ChatOutcomeType {
-  const combined = `${summary} ${transcript}`.toLowerCase()
-  if (/\b(booked|scheduled|confirmed|marcad[ao])\b/.test(combined)) return 'BOOKED'
-  if (/\b(transfer|escalat|call you back|ligar de volta)\b/.test(combined)) return 'ESCALATED_TO_CALL'
-  if (/\b(contact.*info|left.*details|contacto)\b/.test(combined)) return 'LEAD_CAPTURED'
-  if (endedReason === 'silence-timed-out' || endedReason === 'voicemail' || (messageCount !== undefined && messageCount <= 2)) return 'ABANDONED'
-  return 'INFO_PROVIDED'
 }
 
 // ─── Tool facts recorded during the call ──────────────────────────────────────
@@ -214,8 +193,7 @@ function mapMessages(vapiMessages: VapiMessage[]) {
 export async function processVapiEndOfCall(
   report: VapiEndOfCallReport,
   requestIp: string | null,
-  isPhoneCall = true,
-): Promise<{ chatLogId: string | null; callLogId: string | null; alreadyExists?: boolean }> {
+): Promise<{ callLogId: string | null; alreadyExists?: boolean }> {
   const call = report.call
   const rawMessages: VapiMessage[] = report.artifact?.messages ?? report.messages ?? []
   const transcript = report.artifact?.transcript ?? report.transcript ?? ''
@@ -234,147 +212,92 @@ export async function processVapiEndOfCall(
   const endTime = endedAt ? new Date(endedAt) : null
   const duration = endTime ? Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / 1000)) : null
 
-  if (isPhoneCall) {
-    const existing = await prisma.callLog.findUnique({ where: { vapiCallId: call.id }, select: { id: true } })
-    if (existing) return { chatLogId: null, callLogId: existing.id, alreadyExists: true }
+  const existing = await prisma.callLog.findUnique({ where: { vapiCallId: call.id }, select: { id: true } })
+  if (existing) return { callLogId: existing.id, alreadyExists: true }
 
-    const facts = await getToolFacts(call.id)
-    const result = resolveCallResult({ facts, structured, summary, transcript, endedReason: report.endedReason, messageCount: mapped.length })
+  const facts = await getToolFacts(call.id)
+  const result = resolveCallResult({ facts, structured, summary, transcript, endedReason: report.endedReason, messageCount: mapped.length })
 
-    // Patient: the booked appointment's patient is strongest evidence, then caller ID, then email.
-    let patientId: string | null = null
-    const touchedAppointmentId = facts.booked[0] ?? facts.rescheduled[0] ?? facts.cancelled[0]
-    if (touchedAppointmentId) {
-      const a = await prisma.appointment.findUnique({ where: { id: touchedAppointmentId }, select: { patientId: true } })
-      patientId = a?.patientId ?? null
-    }
-    if (!patientId) patientId = await findPatientIdByPhone(visitorPhone)
-    if (!patientId && visitorEmail) {
-      const m = await prisma.patient.findMany({ where: { email: { equals: visitorEmail, mode: 'insensitive' } }, select: { id: true }, take: 2 })
-      if (m.length === 1) patientId = m[0].id
-    }
-
-    let callLogId: string | null = null
-    try {
-      const callLog = await prisma.callLog.create({
-        data: {
-          callerName: visitorName ?? structured.callerName,
-          callerPhone: visitorPhone ?? 'unknown',
-          startTime,
-          endTime,
-          duration,
-          intent: result.intent,
-          outcome: result.outcome,
-          sentiment: inferSentiment(transcript),
-          transcript: transcript || null,
-          summary: summary || null,
-          recordingUrl,
-          vapiCallId: call.id,
-          wasEscalated: result.outcome === 'TRANSFERRED',
-          escalationReason: result.outcome === 'TRANSFERRED' ? 'Transferred by the voice agent' : null,
-          appointmentBooked: result.outcome === 'BOOKED',
-          appointmentId: facts.booked.length === 1 ? facts.booked[0] : null,
-          flagForFollowUp: result.flagForFollowUp,
-          patientId,
-        },
-      })
-      callLogId = callLog.id
-    } catch (err) {
-      // Two deliveries of the same report raced: the unique vapiCallId decides; the loser is a duplicate.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        const winner = await prisma.callLog.findUnique({ where: { vapiCallId: call.id }, select: { id: true } })
-        return { chatLogId: null, callLogId: winner?.id ?? null, alreadyExists: true }
-      }
-      throw err
-    }
-
-    if (patientId && facts.callbacks.length > 0) {
-      await prisma.callbackRequest.updateMany({ where: { id: { in: facts.callbacks }, patientId: null }, data: { patientId } })
-    }
-
-    await prisma.auditLog.create({
-      data: {
-        userId: null, action: 'CREATE', entity: 'call_log', entityId: callLogId,
-        changes: { source: 'vapi_webhook', vapiCallId: call.id, callType: call.type ?? 'unknown', outcomeSource: result.outcomeSource },
-        ipAddress: requestIp, userAgent: 'Vapi-Webhook', timestamp: new Date(),
-      },
-    })
-
-    try {
-      const admins = await prisma.user.findMany({ where: { role: 'ADMIN', isActive: true, approvalStatus: 'APPROVED' }, select: { id: true } })
-      const callerLabel = visitorName ?? structured.callerName ?? (visitorPhone ? `…${visitorPhone.slice(-3)}` : 'Unknown caller')
-      const durationLabel = duration ? `${Math.floor(duration / 60)}m ${duration % 60}s` : null
-      let title = 'New call received'
-      let icon = 'phone'
-      let message = `${callerLabel}${durationLabel ? ` · ${durationLabel}` : ''} · ${result.intent.replace(/_/g, ' ').toLowerCase()}`
-      if (result.outcome === 'BOOKED') { title = 'Appointment booked by phone'; icon = 'check' }
-      else if (result.outcome === 'TRANSFERRED') { title = 'Call transferred to staff'; icon = 'alert' }
-      else if (result.intent === 'EMERGENCY') { title = 'Urgent call'; icon = 'alert' }
-      else if (result.outcome === 'VOICEMAIL') { title = 'Voicemail'; icon = 'alert' }
-      else if (result.outcome === 'HUNG_UP') { title = 'Missed / short call'; icon = 'alert' }
-      if (result.flagForFollowUp) message += ' · follow-up needed'
-      if (admins.length) {
-        await prisma.notification.createMany({
-          data: admins.map((a) => ({ userId: a.id, type: 'call_received', title, message, icon, entityType: 'call_log', entityId: callLogId, actionUrl: '/call-logs' })),
-        })
-      }
-    } catch (err) {
-      console.error('[vapi] call notification failed:', (err as Error).message)
-    }
-
-    return { chatLogId: null, callLogId }
+  // Patient: the booked appointment's patient is strongest evidence, then caller ID, then email.
+  let patientId: string | null = null
+  const touchedAppointmentId = facts.booked[0] ?? facts.rescheduled[0] ?? facts.cancelled[0]
+  if (touchedAppointmentId) {
+    const a = await prisma.appointment.findUnique({ where: { id: touchedAppointmentId }, select: { patientId: true } })
+    patientId = a?.patientId ?? null
   }
-
-  // ── Web conversation → ChatLog (website chatbot is out of scope; filing kept as before,
-  //    except patients are matched only by a unique phone or email, never by a spoken name) ──
-  const existing = await prisma.chatLog.findUnique({ where: { sessionId: call.id }, select: { id: true } })
-  if (existing) return { chatLogId: existing.id, callLogId: null, alreadyExists: true }
-
-  let patientId = await findPatientIdByPhone(visitorPhone)
+  if (!patientId) patientId = await findPatientIdByPhone(visitorPhone)
   if (!patientId && visitorEmail) {
     const m = await prisma.patient.findMany({ where: { email: { equals: visitorEmail, mode: 'insensitive' } }, select: { id: true }, take: 2 })
     if (m.length === 1) patientId = m[0].id
   }
-  const combined = `${summary} ${transcript}`
-  const chatOutcome = inferChatOutcome(summary, transcript, report.endedReason, mapped.length)
-  let chatLogId: string
+
+  let callLogId: string | null = null
   try {
-    const chatLog = await prisma.chatLog.create({
+    const callLog = await prisma.callLog.create({
       data: {
-        sessionId: call.id,
-        visitorName,
-        visitorEmail,
-        visitorPhone,
+        callerName: visitorName ?? structured.callerName,
+        callerPhone: visitorPhone ?? 'unknown',
         startTime,
         endTime,
-        messageCount: mapped.length,
-        topic: inferTopic(combined),
-        outcome: chatOutcome,
-        messages: JSON.parse(JSON.stringify(mapped)),
+        duration,
+        intent: result.intent,
+        outcome: result.outcome,
+        sentiment: inferSentiment(transcript),
+        transcript: transcript || null,
         summary: summary || null,
-        sourcePage: null,
-        deviceType: call.type === 'webCall' ? 'Desktop' : null,
-        browser: null,
-        leadCaptured: chatOutcome === 'LEAD_CAPTURED',
-        appointmentBooked: chatOutcome === 'BOOKED',
+        recordingUrl,
+        vapiCallId: call.id,
+        wasEscalated: result.outcome === 'TRANSFERRED',
+        escalationReason: result.outcome === 'TRANSFERRED' ? 'Transferred by the voice agent' : null,
+        appointmentBooked: result.outcome === 'BOOKED',
+        appointmentId: facts.booked.length === 1 ? facts.booked[0] : null,
+        flagForFollowUp: result.flagForFollowUp,
         patientId,
       },
     })
-    chatLogId = chatLog.id
+    callLogId = callLog.id
   } catch (err) {
+    // Two deliveries of the same report raced: the unique vapiCallId decides; the loser is a duplicate.
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      const winner = await prisma.chatLog.findUnique({ where: { sessionId: call.id }, select: { id: true } })
-      return { chatLogId: winner?.id ?? null, callLogId: null, alreadyExists: true }
+      const winner = await prisma.callLog.findUnique({ where: { vapiCallId: call.id }, select: { id: true } })
+      return { callLogId: winner?.id ?? null, alreadyExists: true }
     }
     throw err
   }
 
+  if (patientId && facts.callbacks.length > 0) {
+    await prisma.callbackRequest.updateMany({ where: { id: { in: facts.callbacks }, patientId: null }, data: { patientId } })
+  }
+
   await prisma.auditLog.create({
     data: {
-      userId: null, action: 'CREATE', entity: 'chat_log', entityId: chatLogId,
-      changes: { source: 'vapi_webhook', vapiCallId: call.id, callType: call.type ?? 'webCall' },
+      userId: null, action: 'CREATE', entity: 'call_log', entityId: callLogId,
+      changes: { source: 'vapi_webhook', vapiCallId: call.id, callType: call.type ?? 'unknown', outcomeSource: result.outcomeSource },
       ipAddress: requestIp, userAgent: 'Vapi-Webhook', timestamp: new Date(),
     },
   })
-  return { chatLogId, callLogId: null }
+
+  try {
+    const admins = await prisma.user.findMany({ where: { role: 'ADMIN', isActive: true, approvalStatus: 'APPROVED' }, select: { id: true } })
+    const callerLabel = visitorName ?? structured.callerName ?? (visitorPhone ? `…${visitorPhone.slice(-3)}` : 'Unknown caller')
+    const durationLabel = duration ? `${Math.floor(duration / 60)}m ${duration % 60}s` : null
+    let title = 'New call received'
+    let icon = 'phone'
+    let message = `${callerLabel}${durationLabel ? ` · ${durationLabel}` : ''} · ${result.intent.replace(/_/g, ' ').toLowerCase()}`
+    if (result.outcome === 'BOOKED') { title = 'Appointment booked by phone'; icon = 'check' }
+    else if (result.outcome === 'TRANSFERRED') { title = 'Call transferred to staff'; icon = 'alert' }
+    else if (result.intent === 'EMERGENCY') { title = 'Urgent call'; icon = 'alert' }
+    else if (result.outcome === 'VOICEMAIL') { title = 'Voicemail'; icon = 'alert' }
+    else if (result.outcome === 'HUNG_UP') { title = 'Missed / short call'; icon = 'alert' }
+    if (result.flagForFollowUp) message += ' · follow-up needed'
+    if (admins.length) {
+      await prisma.notification.createMany({
+        data: admins.map((a) => ({ userId: a.id, type: 'call_received', title, message, icon, entityType: 'call_log', entityId: callLogId, actionUrl: '/call-logs' })),
+      })
+    }
+  } catch (err) {
+    console.error('[vapi] call notification failed:', (err as Error).message)
+  }
+
+  return { callLogId }
 }

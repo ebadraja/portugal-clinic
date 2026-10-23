@@ -24,11 +24,10 @@ export async function GET(req: NextRequest) {
   const { start, end } = monthBounds(month, settings.timezone)
   const inMonth = { startTime: { gte: start, lt: end } }
 
-  const [calls, duration, byOutcome, chats, voiceBookings, callbacks] = await Promise.all([
+  const [calls, duration, byOutcome, voiceBookings, callbacks] = await Promise.all([
     prisma.callLog.count({ where: inMonth }),
     prisma.callLog.aggregate({ where: inMonth, _sum: { duration: true } }),
     prisma.callLog.groupBy({ by: ["outcome"], where: inMonth, _count: { _all: true } }),
-    prisma.chatLog.count({ where: inMonth }),
     prisma.appointment.count({ where: { bookedVia: "VOICE_AGENT", createdAt: { gte: start, lt: end } } }),
     prisma.callbackRequest.count({ where: { createdAt: { gte: start, lt: end } } }),
   ])
@@ -39,7 +38,6 @@ export async function GET(req: NextRequest) {
     minutes: Math.round((seconds / 60) * 10) / 10,
     averageCallSeconds: calls > 0 ? Math.round(seconds / calls) : null,
     byOutcome: Object.fromEntries(byOutcome.map((r) => [r.outcome, r._count._all])),
-    webConversations: chats,
     appointmentsBookedByVoice: voiceBookings,
     callbackRequests: callbacks,
   })

@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
   encrypt,
   decrypt,
-  encryptMessage,
-  decryptMessage,
   legacyEncryptForTest,
 } from '@/lib/crypto'
 
@@ -46,22 +44,9 @@ describe('lib/crypto', () => {
     expect(decrypt(legacy)).toBe(plaintext)
   })
 
-  it('encryptMessage and decryptMessage handle message content', () => {
-    const body = 'Hello from the patient portal'
-    const stored = encryptMessage(body)
-
-    expect(stored.startsWith('gcm:v1:')).toBe(true)
-    expect(decryptMessage(stored)).toBe(body)
-  })
-
-  it('decryptMessage returns empty string for legacy XOR values', () => {
-    const legacy = legacyEncryptForTest('not a gcm message')
-    expect(decryptMessage(legacy)).toBe('')
-  })
-
   it('uses MESSAGING_ENCRYPTION_KEY when set', () => {
-    process.env.MESSAGING_ENCRYPTION_KEY = 'dedicated-messaging-key-32chars!!'
-    const ciphertext = encrypt('messaging-only')
-    expect(decrypt(ciphertext)).toBe('messaging-only')
+    process.env.MESSAGING_ENCRYPTION_KEY = 'dedicated-encryption-key-32chars!'
+    const ciphertext = encrypt('dedicated-key')
+    expect(decrypt(ciphertext)).toBe('dedicated-key')
   })
 })

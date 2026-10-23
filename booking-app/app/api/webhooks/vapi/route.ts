@@ -63,17 +63,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(answer.body)
   }
 
-  // ── End of a call / web conversation ───────────────────────────────────────
-  if (type === "conversation-update" || type === "end-of-call-report") {
+  // ── End of a call (phone or browser) ───────────────────────────────────────
+  if (type === "end-of-call-report") {
     if (!callId) {
       recordWebhookEvent({ eventType: type, outcome: "rejected", reason: "missing_call_id" })
       return NextResponse.json({ error: "Missing call id" }, { status: 400 })
-    }
-    if (type === "conversation-update") {
-      const status = typeof payload?.status === "string" ? payload.status : ""
-      if (status !== "ended" && status !== "complete") {
-        return NextResponse.json({ received: true, processed: false, reason: "conversation still in progress" })
-      }
     }
 
     const report: VapiEndOfCallReport = {
@@ -92,13 +86,13 @@ export async function POST(request: NextRequest) {
 
     try {
       const ip = request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? null
-      const result = await processVapiEndOfCall(report, ip, type === "end-of-call-report")
+      const result = await processVapiEndOfCall(report, ip)
       if (result.alreadyExists) {
         recordWebhookEvent({ eventType: type, callId, outcome: "duplicate" })
-        return NextResponse.json({ received: true, processed: false, reason: "duplicate", chatLogId: result.chatLogId, callLogId: result.callLogId })
+        return NextResponse.json({ received: true, processed: false, reason: "duplicate", callLogId: result.callLogId })
       }
       recordWebhookEvent({ eventType: type, callId, outcome: "processed" })
-      return NextResponse.json({ received: true, processed: true, chatLogId: result.chatLogId, callLogId: result.callLogId }, { status: 201 })
+      return NextResponse.json({ received: true, processed: true, callLogId: result.callLogId }, { status: 201 })
     } catch (err) {
       console.error(`[vapi] processing failed for call=${callId}:`, (err as Error).message)
       recordWebhookEvent({ eventType: type, callId, outcome: "error", reason: (err as Error).message })

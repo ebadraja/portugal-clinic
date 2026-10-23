@@ -90,7 +90,7 @@ export default function CallbacksPage() {
   }, [load, search]);
 
   useEffect(() => {
-    fetch("/api/messaging/staff")
+    fetch("/api/callbacks/assignees")
       .then((r) => (r.ok ? r.json() : { data: [] }))
       .then((d) => setStaff(d.data ?? []))
       .catch(() => setStaff([]));

@@ -8,10 +8,8 @@ import {
   Users,
   Calendar,
   Phone,
-  MessageSquare,
   UserCog,
   FileBarChart,
-  FileText,
   Settings,
   Stethoscope,
   Menu,
@@ -19,9 +17,6 @@ import {
   Sun,
   Bell,
   LogOut,
-  Mail,
-  Zap,
-  Inbox,
   PhoneCall,
 } from "lucide-react";
 
@@ -30,20 +25,12 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useTheme } from "@/components/theme-provider";
 import { useSession, signOut } from "next-auth/react";
 
-// Set to true to show the Email Automation page in the sidebar once it's ready.
-const ENABLE_EMAIL_AUTOMATION = false;
-
 const navItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Patients", href: "/patients", icon: Users },
   { name: "Appointments", href: "/appointments", icon: Calendar },
   { name: "Call Logs", href: "/call-logs", icon: Phone },
   { name: "Callbacks", href: "/callbacks", icon: PhoneCall },
-  { name: "Chat Logs", href: "/chat-logs", icon: MessageSquare },
-  { name: "Messaging", href: "/messaging", icon: Inbox },
-  { name: "Intake Forms", href: "/intake-forms", icon: FileText },
-  { name: "Email Campaigns", href: "/email/campaigns", icon: Mail },
-  ...(ENABLE_EMAIL_AUTOMATION ? [{ name: "Email Automation", href: "/email/automation", icon: Zap }] : []),
   { name: "Staff", href: "/staff", icon: UserCog },
   { name: "Reports", href: "/reports", icon: FileBarChart },
   { name: "Notifications", href: "/notifications", icon: Bell },
@@ -58,9 +45,6 @@ const NAV_COUNT_SOURCES: { href: string; url: string }[] = [
   { href: "/call-logs", url: "/api/call-logs/new-count" },
   // Open callbacks (not "new since") — the queue stays visible until handled.
   { href: "/callbacks", url: "/api/callbacks/new-count" },
-  { href: "/chat-logs", url: "/api/chat-logs/new-count" },
-  { href: "/intake-forms", url: "/api/intake-forms/new-count" },
-  { href: "/patients", url: "/api/patient-drafts/new-count" },
 ];
 
 const lastSeenKey = (href: string) => `nav-lastseen:${href}`;
@@ -125,9 +109,7 @@ function SidebarContent({
       )}>
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive =
-            pathname === item.href ||
-            (item.href === "/messaging" && pathname.startsWith("/messaging"));
+          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
           const badgeCount = badgeCounts[item.href] ?? 0;
 
@@ -206,8 +188,7 @@ export function Sidebar() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<SidebarNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [messagingUnreadCount, setMessagingUnreadCount] = useState(0);
-  // New-item counts keyed by nav href (appointments, call/chat logs, intake forms)
+  // New-item counts keyed by nav href (appointments, call logs, callbacks)
   const [navCounts, setNavCounts] = useState<Record<string, number>>({});
 
   const formatTime = (date: Date): string => {
@@ -240,18 +221,6 @@ export function Sidebar() {
       }
     } catch (error) {
       console.error("Failed to fetch notifications:", error);
-    }
-  };
-
-  const fetchMessagingUnread = async () => {
-    try {
-      const res = await fetch("/api/messaging/unread-count");
-      if (res.ok) {
-        const data = await res.json();
-        setMessagingUnreadCount(data.unreadCount ?? 0);
-      }
-    } catch (error) {
-      console.error("Failed to fetch messaging unread count:", error);
     }
   };
 
@@ -296,11 +265,9 @@ export function Sidebar() {
 
   useEffect(() => {
     fetchNotifications();
-    fetchMessagingUnread();
     fetchNavCounts();
     const interval = setInterval(() => {
       fetchNotifications();
-      fetchMessagingUnread();
       fetchNavCounts();
     }, 10000);
     return () => clearInterval(interval);
@@ -317,10 +284,7 @@ export function Sidebar() {
     }
   };
 
-  const badgeCounts: Record<string, number> = {
-    ...navCounts,
-    "/messaging": messagingUnreadCount,
-  };
+  const badgeCounts = navCounts;
 
   return (
     <>

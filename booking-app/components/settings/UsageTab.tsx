@@ -10,7 +10,6 @@ type Usage = {
   minutes: number;
   averageCallSeconds: number | null;
   byOutcome: Record<string, number>;
-  webConversations: number;
   appointmentsBookedByVoice: number;
   callbackRequests: number;
 };
@@ -30,8 +29,8 @@ export function UsageTab() {
       >
         {!data ? (
           <LoadState loading={loading} error={error} onRetry={retry} />
-        ) : data.calls === 0 && data.webConversations === 0 ? (
-          <p className="text-sm text-slate-500 py-6 text-center">No calls or web conversations were recorded in {data.month}.</p>
+        ) : data.calls === 0 ? (
+          <p className="text-sm text-slate-500 py-6 text-center">No calls were recorded in {data.month}.</p>
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -41,7 +40,6 @@ export function UsageTab() {
                 ["Avg. call", data.averageCallSeconds === null ? "—" : `${Math.floor(data.averageCallSeconds / 60)}m ${data.averageCallSeconds % 60}s`],
                 ["Booked by voice", String(data.appointmentsBookedByVoice)],
                 ["Callback requests", String(data.callbackRequests)],
-                ["Web conversations", String(data.webConversations)],
               ].map(([k, v]) => (
                 <div key={k} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
                   <p className="text-xs text-slate-500 dark:text-slate-400">{k}</p>

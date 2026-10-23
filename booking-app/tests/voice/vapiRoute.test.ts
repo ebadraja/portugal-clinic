@@ -71,10 +71,10 @@ describe('POST /api/webhooks/vapi', () => {
   })
 
   it('files an end-of-call report once; a duplicate is acknowledged', async () => {
-    m.processVapiEndOfCall.mockResolvedValueOnce({ callLogId: 'cl1', chatLogId: null })
+    m.processVapiEndOfCall.mockResolvedValueOnce({ callLogId: 'cl1' })
     const r1 = await POST(post({ message: { type: 'end-of-call-report', call: { id: 'call-1' } } }, SECRET))
     expect(r1.status).toBe(201)
-    m.processVapiEndOfCall.mockResolvedValueOnce({ callLogId: 'cl1', chatLogId: null, alreadyExists: true })
+    m.processVapiEndOfCall.mockResolvedValueOnce({ callLogId: 'cl1', alreadyExists: true })
     const r2 = await POST(post({ message: { type: 'end-of-call-report', call: { id: 'call-1' } } }, SECRET))
     expect(r2.status).toBe(200)
     expect((await r2.json()).reason).toBe('duplicate')
@@ -90,7 +90,7 @@ describe('POST /api/webhooks/vapi', () => {
 
   it('never logs the payload body', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
-    m.processVapiEndOfCall.mockResolvedValue({ callLogId: 'x', chatLogId: null })
+    m.processVapiEndOfCall.mockResolvedValue({ callLogId: 'x' })
     await POST(post({ message: { type: 'end-of-call-report', call: { id: 'c3' }, transcript: 'SECRET-TRANSCRIPT Maria nasceu em 1985' } }, SECRET))
     const printed = log.mock.calls.flat().join(' ')
     expect(printed).not.toMatch(/SECRET-TRANSCRIPT|1985/)

@@ -24,7 +24,6 @@ const m = vi.hoisted(() => {
 })
 
 vi.mock('@/lib/prisma', () => ({ prisma: m.prisma, default: m.prisma }))
-vi.mock('@/lib/messaging/systemMessages', () => ({ appendSystemMessage: vi.fn().mockResolvedValue({}) }))
 vi.mock('@/lib/notifications/staffEmail', () => ({ emailStaffAlert: vi.fn().mockResolvedValue(true) }))
 
 import { buildClinicSettings } from '@/lib/clinic/settings'

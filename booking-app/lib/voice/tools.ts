@@ -39,7 +39,6 @@ import {
 } from '@/lib/clinic/time'
 import { maskPhone, toE164 } from '@/lib/clinic/phone'
 import { verifyCaller, type VerifiedPatient, type VerifyOutcome } from '@/lib/voice/identity'
-import { appendSystemMessage } from '@/lib/messaging/systemMessages'
 import { emailStaffAlert } from '@/lib/notifications/staffEmail'
 
 export type ToolContext = {
@@ -358,12 +357,6 @@ export async function toolBookAppointment(args: Args, ctx: ToolContext): Promise
   void emailStaffAlert('newBooking', `Nova marcação pelo assistente: ${patient.firstName}, ${when}`, [
     `O assistente de voz marcou ${t.label} para ${patient.firstName} — ${when}.`,
   ])
-  appendSystemMessage({
-    patientId: patient.id,
-    content: `Consulta marcada pelo assistente de voz: ${t.label}, ${when}.`,
-    metadata: { source: 'vapi', event: 'appointment_booked', appointmentId: appt.id },
-  }).catch((err: Error) => console.error('[voice-tool] system message failed:', err.message))
-
   const p = ctx.settings.bookingPolicy
   return `Consulta marcada: ${t.label} para ${patient.firstName}, ${when}. Informe que pedimos aviso de pelo menos ${p.cancellationNoticeHours} horas para desmarcar e que a tolerância de atraso é de ${p.lateToleranceMinutes} minutos.`
 }
@@ -427,12 +420,6 @@ export async function toolCancelAppointment(args: Args, ctx: ToolContext): Promi
     `O assistente de voz desmarcou a consulta de ${v.patient.firstName} — ${when}.`,
     late ? `Aviso com menos de ${ctx.settings.bookingPolicy.cancellationNoticeHours} horas de antecedência.` : 'Aviso dentro do prazo.',
   ])
-  appendSystemMessage({
-    patientId: v.patient.id,
-    content: `Consulta desmarcada pelo assistente de voz: ${when}.`,
-    metadata: { source: 'vapi', event: 'appointment_cancelled', appointmentId: appt.id },
-  }).catch((err: Error) => console.error('[voice-tool] system message failed:', err.message))
-
   const lateText = late
     ? ` A desmarcação foi feita com menos de ${ctx.settings.bookingPolicy.cancellationNoticeHours} horas de antecedência; a equipa foi informada.`
     : ''

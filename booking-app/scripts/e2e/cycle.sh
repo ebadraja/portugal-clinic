@@ -38,7 +38,7 @@ echo "seed: ok"
 DATABASE_URL="$DB" DATABASE_POOL_MAX=1 NEXTAUTH_SECRET="itest-nextauth-secret-0123456789-abcdefghij" \
 NEXTAUTH_URL="http://localhost:3100" AUTH_URL="http://localhost:3100" AUTH_TRUST_HOST=true \
 VAPI_WEBHOOK_SECRET="itest-vapi-secret" MESSAGING_ENCRYPTION_KEY="itest-encryption-key-0123456789abcdef" CRON_SECRET="itest-cron-secret" \
-SMTP_USER="" SMTP_PASS="" SMTP_HOST="" SENDGRID_API_KEY="" HIPPATIZER_API_KEY="" \
+SMTP_USER="" SMTP_PASS="" SMTP_HOST="" SENDGRID_API_KEY="" \
 node node_modules/next/dist/bin/next start -p 3100 > "$LOGS/next.log" 2>&1 &
 NX=$!
 for i in $(seq 1 60); do curl -s -o /dev/null -w "%{http_code}" http://localhost:3100/api/webhooks/vapi 2>/dev/null | grep -q 200 && break; sleep 1; done

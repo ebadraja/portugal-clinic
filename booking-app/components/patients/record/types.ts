@@ -69,7 +69,8 @@ export type PatientRecordData = {
   createdAt: string
   appointments: RecordAppointment[]
   callLogs: { id: string; startTime: string; duration: number | null; summary: string | null; outcome: string | null; intent?: string | null; hasRecording?: boolean }[]
-  chatLogs: { id: string; startTime: string; topic: string | null; outcome: string | null }[]
+  /** Confirmations and reminders sent or failed (AppointmentNotification). */
+  notifications: { id: string; kind: string; channel: string; status: string; sendAt: string; sentAt: string | null; deliveryStatus: string | null; error: string | null }[]
   notes: RecordNote[]
   documents: { id: string; fileName: string; fileSize: number | null; createdAt: string; category?: string }[]
 }

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Phone,
   Calendar,
@@ -13,10 +12,8 @@ import {
   XCircle,
   ArrowUpRight,
   ArrowDownRight,
-  MessageSquare,
   RefreshCw,
-  Inbox,
-  Timer,
+  PhoneCall,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -38,8 +35,6 @@ interface ScheduleItem {
   type: string;
   status: string;
   patient: { firstName: string; lastName: string } | null;
-  title?: string | null;
-  source?: "crm" | "gcal";
 }
 
 interface DashboardData {
@@ -54,12 +49,9 @@ interface DashboardData {
     activePatients: number;
     newPatientsThisWeek: number;
     noShowRate: number;
-    chatbotsToday: number;
     avgCallDurationSeconds: number;
     escalatedToday: number;
-    messagesToday: number;
-    openConversations: number;
-    avgFirstResponseMinutes: number | null;
+    openCallbacks: number;
   };
   recentCalls: RecentCall[];
   todaySchedule: ScheduleItem[];
@@ -306,71 +298,6 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Patient Messaging KPIs */}
-      <div>
-        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Patient Messaging</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-6">
-          {loading ? (
-            Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 rounded-xl p-4 md:p-6 shadow-sm animate-pulse h-28" />
-            ))
-          ) : (
-            <>
-              <Link
-                href="/messaging"
-                className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 rounded-xl p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow block"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">Messages Today</p>
-                    <p className="text-2xl md:text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-50 mt-1">
-                      {s?.messagesToday ?? 0}
-                    </p>
-                  </div>
-                  <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg">
-                    <MessageSquare className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-                  </div>
-                </div>
-              </Link>
-
-              <Link
-                href="/messaging"
-                className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 rounded-xl p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow block"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">Open Conversations</p>
-                    <p className="text-2xl md:text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-50 mt-1">
-                      {s?.openConversations ?? 0}
-                    </p>
-                  </div>
-                  <div className="p-2.5 bg-sky-50 dark:bg-sky-950/40 rounded-lg">
-                    <Inbox className="h-5 w-5 text-sky-600 dark:text-sky-400" />
-                  </div>
-                </div>
-              </Link>
-
-              <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 rounded-xl p-4 md:p-6 shadow-sm">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">Avg First Response</p>
-                    <p className="text-2xl md:text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-50 mt-1">
-                      {s?.avgFirstResponseMinutes != null ? `${s.avgFirstResponseMinutes}m` : '—'}
-                    </p>
-                  </div>
-                  <div className="p-2.5 bg-teal-50 dark:bg-teal-950/40 rounded-lg">
-                    <Timer className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-                  </div>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                  Across recent conversations with patient messages
-                </p>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
       {/* Recent Calls + Today's Schedule */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {loading ? (
@@ -457,11 +384,10 @@ export default function DashboardPage() {
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
                             {apt.patient
                               ? `${apt.patient.firstName} ${apt.patient.lastName}`
-                              : apt.title ?? "Unknown Patient"}
+                              : "Unknown Patient"}
                           </p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
                             {formatAppointmentType(apt.type)}
-                            {apt.source === "gcal" && " · Google Calendar"}
                           </p>
                         </div>
                       </div>
@@ -482,22 +408,22 @@ export default function DashboardPage() {
           ))
         ) : (
           <>
-            <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 rounded-xl p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow">
+            <Link href="/callbacks" className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 rounded-xl p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow block">
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-blue-50 dark:bg-blue-950/40 rounded-lg flex-shrink-0">
-                  <MessageSquare className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <PhoneCall className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
                   <p className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">
-                    Chatbot Conversations
+                    Open Callbacks
                   </p>
                   <p className="text-xl md:text-2xl font-semibold text-slate-900 dark:text-slate-50 mt-1">
-                    {s?.chatbotsToday ?? 0}
+                    {s?.openCallbacks ?? 0}
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">today</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">waiting for reception</p>
                 </div>
               </div>
-            </div>
+            </Link>
 
             <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 rounded-xl p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center gap-3 md:gap-4">

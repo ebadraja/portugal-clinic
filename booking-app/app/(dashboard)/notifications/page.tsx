@@ -189,7 +189,6 @@ export default function NotificationsPage() {
             <SelectItem value="all">All Types</SelectItem>
             <SelectItem value="refill_request">Refill Request</SelectItem>
             <SelectItem value="callback_request">Callback Request</SelectItem>
-            <SelectItem value="intake_forms_requested">Intake Forms</SelectItem>
             <SelectItem value="transfer_context">Transfer</SelectItem>
             <SelectItem value="appointment_booked">Appt Booked</SelectItem>
             <SelectItem value="appointment_cancelled">Appt Cancelled</SelectItem>

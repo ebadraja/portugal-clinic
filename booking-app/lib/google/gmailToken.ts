@@ -2,10 +2,8 @@
  * Gmail OAuth token helper.
  *
  * Returns a valid Gmail access token (refreshing if expired) plus the connected
- * sender address. Reuses the SAME Google OAuth client stored for Google Calendar
- * (googleCalClientId / googleCalClientSecret) — same Cloud project.
- *
- * Used by both the API routes and the email worker (services/emailQueue.ts).
+ * sender address. The Google OAuth client is saved in Settings → Email (Gmail); its
+ * columns keep their old names (googleCalClientId / googleCalClientSecret).
  */
 
 import { prisma } from '@/lib/prisma';

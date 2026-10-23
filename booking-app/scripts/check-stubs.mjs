@@ -13,7 +13,7 @@ import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const DIRS = ['app', 'components', 'lib', 'services']
+const DIRS = ['app', 'components', 'lib']
 const SKIP = [/[\\/]generated[\\/]/, /[\\/]node_modules[\\/]/]
 const EXT = /\.(ts|tsx|js|mjs)$/
 
@@ -21,8 +21,6 @@ const EXT = /\.(ts|tsx|js|mjs)$/
 const IGNORE = {
   'components/add-patient-modal.tsx': 'unused (nothing imports it); pediatric legacy form',
   'components/edit-patient-modal.tsx': 'unused (nothing imports it); patient editing is inline on the patient page',
-  'app/api/webhooks/hippatizer/test/route.ts': 'synthetic test payload for the Hippatizer webhook tester',
-  'components/messaging/MessagingLockOverlay.tsx': 'messaging lock screen copy — product decision outside this retrofit',
 }
 
 const RULES = [

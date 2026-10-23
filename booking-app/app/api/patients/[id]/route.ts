@@ -26,9 +26,11 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
           orderBy: { startTime: "desc" },
           take: 20,
         },
-        chatLogs: {
-          orderBy: { startTime: "desc" },
-          take: 20,
+        appointmentNotifications: {
+          where: { status: { in: ["SENT", "FAILED"] } },
+          orderBy: { sendAt: "desc" },
+          take: 30,
+          select: { id: true, kind: true, channel: true, status: true, sendAt: true, sentAt: true, deliveryStatus: true, error: true },
         },
         notes: {
           include: {
@@ -62,7 +64,8 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
       },
     }).catch(() => {})
 
-    return NextResponse.json({ ...patient, callLogs: toPublicCallLogs(patient.callLogs) })
+    const { appointmentNotifications, ...rest } = patient
+    return NextResponse.json({ ...rest, callLogs: toPublicCallLogs(patient.callLogs), notifications: appointmentNotifications })
   } catch (error) {
     console.error("[GET /api/patients/[id]]", error)
     return NextResponse.json({ error: "Failed to fetch patient" }, { status: 500 })

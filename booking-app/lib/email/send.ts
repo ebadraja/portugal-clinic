@@ -2,8 +2,8 @@
  * Email delivery — one place for the provider cascade:
  *   Gmail (connected + enabled in CRM Settings) → SendGrid (env) → SMTP (env).
  *
- * Used by the BullMQ worker (services/emailQueue.ts) and by request-time
- * transactional mail that must not depend on Redis (staff invites, password resets).
+ * Used by appointment confirmations / reminders (lib/appointments/dispatch.ts),
+ * staff alerts, invites and password resets.
  *
  * HIPAA/GDPR: never log subject, body or recipient.
  */

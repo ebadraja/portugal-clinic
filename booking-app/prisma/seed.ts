@@ -430,9 +430,9 @@ async function main() {
         status: "CONFIRMED",
         provider: "P. Jonathan Tomás, APRN",
         reason: "18-month immunizations (DTaP, IPV, Hib, PCV)",
-        bookedVia: "CHATBOT",
+        bookedVia: "WEBSITE",
         confirmedAt: new Date("2024-05-19T10:00:00Z"),
-        confirmedVia: "chatbot",
+        confirmedVia: "sms",
         remindersSent: 1,
         createdById: receptionist.id,
       },
@@ -679,121 +679,6 @@ async function main() {
 
   console.log("  ✓ Call logs (7)")
 
-  // ── 6. CHAT LOGS ────────────────────────────────────────────────────────────
-  await Promise.all([
-    prisma.chatLog.create({
-      data: {
-        patientId: amara.id,
-        visitorName: "Adaeze Okafor",
-        visitorEmail: "adaeze.okafor@gmail.com",
-        sessionId: "sess_chat_001",
-        startTime: new Date("2024-05-19T10:05:00Z"),
-        endTime: new Date("2024-05-19T10:14:00Z"),
-        messageCount: 12,
-        topic: "APPOINTMENT",
-        outcome: "BOOKED",
-        appointmentBooked: true,
-        appointmentId: appts[4].id,
-        sourcePage: "/appointments",
-        deviceType: "mobile",
-        browser: "Safari",
-        isReviewed: true,
-        messages: [
-          { type: "bot", content: "Hi! Welcome to Kids 0-18 Integrated Pediatrics. How can I help you today?", timestamp: "10:05:02" },
-          { type: "visitor", content: "I need to book Amara's 18-month vaccines", timestamp: "10:05:40", senderName: "Adaeze" },
-          { type: "bot", content: "I'd be happy to help book Amara's immunizations! What days work best for you next week?", timestamp: "10:05:42" },
-          { type: "visitor", content: "Tuesday afternoon if possible", timestamp: "10:06:10", senderName: "Adaeze" },
-          { type: "bot", content: "We have Tuesday May 21st at 2:00 PM available. Shall I book that?", timestamp: "10:06:12" },
-          { type: "visitor", content: "Yes please!", timestamp: "10:06:30", senderName: "Adaeze" },
-          { type: "bot", content: "All set! Amara is booked for vaccinations on Tuesday May 21st at 2:00 PM. You'll receive a confirmation email shortly.", timestamp: "10:06:32" },
-        ],
-        summary: "Parent booked 18-month vaccination appointment for Amara Okafor for May 21st at 2 PM.",
-      },
-    }),
-
-    prisma.chatLog.create({
-      data: {
-        visitorName: "New Patient Inquiry",
-        visitorEmail: "sarah.new@gmail.com",
-        visitorPhone: "(555) 499-0011",
-        sessionId: "sess_chat_002",
-        startTime: new Date("2024-05-18T14:30:00Z"),
-        endTime: new Date("2024-05-18T14:45:00Z"),
-        messageCount: 16,
-        topic: "SERVICES",
-        outcome: "LEAD_CAPTURED",
-        leadCaptured: true,
-        leadInfo: { name: "Sarah New", email: "sarah.new@gmail.com", phone: "(555) 499-0011", childAge: "4 months", insurance: "Cigna", note: "Looking for new pediatrician" },
-        sourcePage: "/",
-        deviceType: "desktop",
-        browser: "Chrome",
-        isReviewed: false,
-        messages: [
-          { type: "bot", content: "Welcome! Are you looking for information for a current or new patient?", timestamp: "14:30:05" },
-          { type: "visitor", content: "New patient — my baby is 4 months old and we just moved to Austin", timestamp: "14:30:45", senderName: "Sarah" },
-          { type: "bot", content: "Congratulations and welcome to Austin! We'd love to be your baby's pediatric home. Are you currently insured?", timestamp: "14:30:48" },
-          { type: "visitor", content: "Yes, we have Cigna", timestamp: "14:31:02", senderName: "Sarah" },
-          { type: "bot", content: "Great news — we accept Cigna! Can I get your contact details so our team can reach out to set up a new patient appointment?", timestamp: "14:31:05" },
-          { type: "visitor", content: "Sure! It's Sarah, sarah.new@gmail.com, (555) 499-0011", timestamp: "14:31:50", senderName: "Sarah" },
-          { type: "bot", content: "Perfect! I've captured your information. Our front desk will call you within 1 business day to schedule your baby's visit. Is there anything else I can help with?", timestamp: "14:31:53" },
-        ],
-        summary: "New patient lead. Mother with 4-month-old, Cigna insurance, recently moved to Austin. Contact info captured.",
-      },
-    }),
-
-    prisma.chatLog.create({
-      data: {
-        visitorName: "Anonymous",
-        sessionId: "sess_chat_003",
-        startTime: new Date("2024-05-17T09:00:00Z"),
-        endTime: new Date("2024-05-17T09:06:00Z"),
-        messageCount: 6,
-        topic: "HOURS",
-        outcome: "INFO_PROVIDED",
-        sourcePage: "/contact",
-        deviceType: "desktop",
-        browser: "Firefox",
-        isReviewed: false,
-        messages: [
-          { type: "bot", content: "Hi there! How can I help you today?", timestamp: "09:00:10" },
-          { type: "visitor", content: "What are your office hours?", timestamp: "09:00:42" },
-          { type: "bot", content: "Our office is open Monday–Friday 8 AM–5 PM, and Saturday 9 AM–1 PM. We're closed Sundays.", timestamp: "09:00:44" },
-          { type: "visitor", content: "Do you have late evening appointments?", timestamp: "09:01:05" },
-          { type: "bot", content: "We don't currently offer evening appointments, but for urgent after-hours needs, you can reach our on-call nurse at (555) 200-0099.", timestamp: "09:01:07" },
-          { type: "system", content: "Session ended", timestamp: "09:06:00" },
-        ],
-        summary: "Visitor asked about office hours and after-hours care options. Info provided.",
-      },
-    }),
-
-    prisma.chatLog.create({
-      data: {
-        visitorName: "Ana Rodriguez",
-        visitorEmail: "ana.rodriguez@outlook.com",
-        sessionId: "sess_chat_004",
-        startTime: new Date("2024-05-16T11:15:00Z"),
-        endTime: new Date("2024-05-16T11:22:00Z"),
-        messageCount: 10,
-        topic: "INSURANCE",
-        outcome: "INFO_PROVIDED",
-        sourcePage: "/services",
-        deviceType: "mobile",
-        browser: "Chrome",
-        isReviewed: false,
-        messages: [
-          { type: "bot", content: "Hello! What can I help you with today?", timestamp: "11:15:08" },
-          { type: "visitor", content: "Do you accept Humana insurance?", timestamp: "11:15:40", senderName: "Ana" },
-          { type: "bot", content: "Yes, we do accept Humana! We're in-network with most major insurance providers including BCBS, Aetna, Cigna, UnitedHealthcare, and Humana.", timestamp: "11:15:43" },
-          { type: "visitor", content: "Great, and is there a copay for well visits?", timestamp: "11:16:10", senderName: "Ana" },
-          { type: "bot", content: "Copays vary by plan. Most well-child visits are covered at no cost under preventive care. I'd recommend calling Humana directly to confirm your specific benefits.", timestamp: "11:16:14" },
-        ],
-        summary: "Parent confirmed Humana is accepted. Asked about copays — directed to call insurance for specifics.",
-      },
-    }),
-  ])
-
-  console.log("  ✓ Chat logs (4)")
-
   // ── 7. PATIENT NOTES ────────────────────────────────────────────────────────
   await Promise.all([
     prisma.patientNote.create({
@@ -986,11 +871,11 @@ async function main() {
 
   console.log("\n✅ Seed complete!")
   console.log("   2 admin users  |  8 patients  |  10 appointments")
-  console.log("   7 call logs    |  4 chat logs  |  6 patient notes")
+  console.log("   7 call logs    |  6 patient notes")
   console.log("   5 documents    |  10 FAQs      |  7 audit logs")
   console.log("")
   console.log("   Admin logins use the SEED_ADMIN_PASSWORD you provided.")
-  console.log("   Patients, calls and chats are synthetic demo records for local development only.")
+  console.log("   Patients and calls are synthetic demo records for local development only.")
 }
 
 main()

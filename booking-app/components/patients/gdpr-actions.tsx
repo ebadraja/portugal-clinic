@@ -67,7 +67,7 @@ export function PatientGdprActions({ patientId, fullName }: { patientId: string;
           <div className="space-y-4 text-sm">
             <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40 p-3 text-red-800 dark:text-red-300 space-y-1">
               <p className="font-medium">This cannot be undone.</p>
-              <p>Deletes the patient, appointments, notes, call and chat logs, intake forms, messages, email logs and callbacks.</p>
+              <p>Deletes the patient, appointments, notes, call logs, reminders sent, callbacks and any records left from earlier features (chats, intake forms, messages, email logs).</p>
               <p>Kept: SMS opt-outs (so a STOP keeps working) and the audit trail. Clinical records may have a legal retention period — only erase when that does not apply. Export the data first if the patient asked for a copy.</p>
             </div>
             <div>

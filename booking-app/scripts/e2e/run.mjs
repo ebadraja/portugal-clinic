@@ -328,7 +328,7 @@ async function main() {
   const st = await admin.json('/api/settings/status')
   const ids = Object.fromEntries((st.data.checks ?? []).map((c) => [c.id, c.status]))
   check('status: webhook secret ok', ids.vapi_secret === 'ok')
-  check('status: appointment reminders no longer need the worker (info)', ids.worker === 'info' && ids.reminders === 'info', JSON.stringify({ worker: ids.worker, reminders: ids.reminders }))
+  check('status: no background-worker check; reminders off until cutover (info)', ids.worker === undefined && ids.reminders === 'info', JSON.stringify({ worker: ids.worker, reminders: ids.reminders }))
   check('status: real integrations list', Array.isArray(st.data.integrations) && st.data.integrations.some((i) => i.name === 'Vapi' && i.connected === true))
   const usage = await admin.json('/api/settings/usage')
   check('usage counts real calls', usage.status === 200 && usage.data.calls >= 1 && usage.data.appointmentsBookedByVoice >= 1, JSON.stringify(usage.data))
@@ -346,15 +346,15 @@ async function main() {
   const loginPage = await anon.req('/login?token=abc')
   check('/login?token= is reachable without a session', loginPage.status === 200)
 
-  console.log('\n[13] Public email links and SendGrid webhook')
-  const unsub = await anon.req('/api/email/unsubscribe?token=not-a-valid-token')
-  check('unsubscribe link reachable without a staff session (no login redirect)', ![302, 303, 307].includes(unsub.status) && unsub.status < 500, String(unsub.status))
-  const view = await anon.req('/api/email/view?token=not-a-valid-token')
-  check('view-in-browser link reachable without a staff session', ![302, 303, 307].includes(view.status) && view.status < 500, String(view.status))
-  const sg = await anon.json('/api/email/webhook/sendgrid', { method: 'POST', body: [] })
-  check('SendGrid webhook refuses when its verification key is not set (503)', sg.status === 503, String(sg.status))
-  const stillPrivate = await anon.req('/api/email/templates')
-  check('other email APIs still require a session', [302, 303, 307].includes(stillPrivate.status), String(stillPrivate.status))
+  console.log('\n[13] Removed features stay removed')
+  for (const p of ['/messaging', '/intake-forms', '/chat-logs', '/email/campaigns', '/portal']) {
+    const res = await admin.req(p)
+    check(`${p} is gone (404)`, res.status === 404, String(res.status))
+  }
+  const portalApi = await anon.req('/api/portal/session')
+  check('former portal API is not public any more', [302, 303, 307].includes(portalApi.status), String(portalApi.status))
+  const assignees = await admin.json('/api/callbacks/assignees')
+  check('callback assignees list', assignees.status === 200 && Array.isArray(assignees.data.data) && assignees.data.data.length >= 1, String(assignees.status))
 
 
   console.log('\n[13b] Agenda, reminders outbox, patient link, Zappy import')

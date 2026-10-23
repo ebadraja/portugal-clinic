@@ -82,21 +82,6 @@ export function decrypt(encoded: string): string {
   return legacyDecrypt(encoded)
 }
 
-/** Explicit AES-256-GCM encrypt — alias used by messaging module code paths. */
-export function encryptMessage(value: string): string {
-  return gcmEncrypt(value)
-}
-
-/** Explicit AES-256-GCM decrypt for message content. */
-export function decryptMessage(encoded: string): string {
-  if (!encoded.startsWith(GCM_PREFIX)) return ''
-  try {
-    return gcmDecrypt(encoded)
-  } catch {
-    return ''
-  }
-}
-
 /** @internal Test-only: produce legacy XOR ciphertext for backward-compat tests. */
 export function legacyEncryptForTest(value: string): string {
   return legacyEncrypt(value)

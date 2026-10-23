@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { auth } from "@/auth"
-import { fetchGcalEvents, GCAL_TYPE_LABELS, type ClassifiedGcalEvent } from "@/lib/google-calendar"
-import { computeMessagingKpis } from "@/lib/messaging/timeline"
 
 export async function GET() {
   try {
@@ -36,11 +34,10 @@ export async function GET() {
       newPatientsThisWeek,
       noShowsLast30,
       totalAptsLast30,
-      chatsToday,
       escalatedToday,
       avgDurationResult,
       recentCalls,
-      messagingKpis,
+      openCallbacks,
     ] = await Promise.all([
       // Practice settings
       prisma.settings.findFirst({ select: { practiceName: true } }),
@@ -88,9 +85,6 @@ export async function GET() {
         where: { startTime: { gte: thirtyDaysAgo, lte: todayEnd } },
       }),
 
-      // Chatbot sessions today
-      prisma.chatLog.count({ where: { startTime: { gte: todayStart, lte: todayEnd } } }),
-
       // Escalated calls today
       prisma.callLog.count({
         where: { wasEscalated: true, startTime: { gte: todayStart, lte: todayEnd } },
@@ -121,58 +115,20 @@ export async function GET() {
         },
       }),
 
-      computeMessagingKpis(),
+      // Callbacks the reception still has to make (same rule as the Callbacks badge)
+      prisma.callbackRequest.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] } } }),
     ])
 
-    // Google Calendar events (last 30 days through end of today) — the practice's
-    // real schedule lives in GCal, so appointment stats must include it.
-    let gcalEvents: ClassifiedGcalEvent[] = []
-    try {
-      const gcal = await fetchGcalEvents(thirtyDaysAgo, todayEnd)
-      gcalEvents = gcal.events.filter((e) => !e.allDay)
-    } catch (e) {
-      console.error("[GET /api/dashboard] gcal fetch failed", e)
-    }
-
-    const inRange = (e: ClassifiedGcalEvent, from: Date, to: Date) => {
-      const t = new Date(e.start).getTime()
-      return t >= from.getTime() && t <= to.getTime()
-    }
-    const gcalToday = gcalEvents.filter((e) => inRange(e, todayStart, todayEnd))
-    const gcalNoShows30 = gcalEvents.filter((e) => e.noShow).length
-
     const noShowRate =
-      totalAptsLast30 + gcalEvents.length > 0
-        ? parseFloat(
-            (((noShowsLast30 + gcalNoShows30) / (totalAptsLast30 + gcalEvents.length)) * 100).toFixed(1)
-          )
-        : 0
+      totalAptsLast30 > 0 ? parseFloat(((noShowsLast30 / totalAptsLast30) * 100).toFixed(1)) : 0
 
-    // Merge today's schedule: CRM appointments + GCal events (no-shows excluded)
-    const mergedSchedule = [
-      ...todayAppointments.map((a) => ({
-        id: a.id,
-        startTime: a.startTime.toISOString(),
-        type: a.type as string,
-        status: a.status as string,
-        patient: a.patient,
-        title: null as string | null,
-        source: "crm" as const,
-      })),
-      ...gcalToday
-        .filter((e) => !e.noShow)
-        .map((e) => ({
-          id: e.id,
-          startTime: e.start,
-          type: GCAL_TYPE_LABELS[e.visitType],
-          status: "SCHEDULED",
-          patient: null,
-          title: e.cleanTitle,
-          source: "gcal" as const,
-        })),
-    ]
-      .sort((a, b) => a.startTime.localeCompare(b.startTime))
-      .slice(0, 8)
+    const schedule = todayAppointments.map((a) => ({
+      id: a.id,
+      startTime: a.startTime.toISOString(),
+      type: a.type as string,
+      status: a.status as string,
+      patient: a.patient,
+    }))
 
     const avgDurationSecs = avgDurationResult._avg.duration ?? 0
 
@@ -188,21 +144,18 @@ export async function GET() {
       stats: {
         callsToday,
         callsYesterday,
-        appointmentsToday: todayAppointments.length + gcalToday.length,
+        appointmentsToday: todayAppointments.length,
         appointmentsBookedToday,
         appointmentsYesterday,
         activePatients,
         newPatientsThisWeek,
         noShowRate,
-        chatbotsToday: chatsToday,
         avgCallDurationSeconds: Math.round(avgDurationSecs),
         escalatedToday,
-        messagesToday: messagingKpis.messagesToday,
-        openConversations: messagingKpis.openConversations,
-        avgFirstResponseMinutes: messagingKpis.avgFirstResponseMinutes,
+        openCallbacks,
       },
       recentCalls,
-      todaySchedule: mergedSchedule,
+      todaySchedule: schedule,
     })
   } catch (error) {
     console.error("[GET /api/dashboard]", error)

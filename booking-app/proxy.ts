@@ -4,27 +4,11 @@ import { auth } from "@/auth"
 function isPublicRoute(pathname: string): boolean {
   if (pathname.includes("/api/webhooks")) return true
   if (pathname.includes("/api/auth")) return true
-  // Patient portal API (magic link, session, scoped messages) — M4
-  if (pathname.startsWith("/api/portal")) return true
-  // Website chat widget API
-  if (pathname.startsWith("/api/webchat")) return true
-  // Links inside patient emails (signed tokens) and the SendGrid event webhook (signature-verified)
-  if (pathname === "/api/email/unsubscribe") return true
-  if (pathname === "/api/email/view") return true
-  if (pathname === "/api/email/webhook/sendgrid") return true
-  // Patient portal pages
-  if (pathname.startsWith("/portal")) return true
   // Appointment confirm/cancel link from reminders (/c/<token>, token-scoped) and its API
   if (pathname.startsWith("/c/")) return true
   if (pathname.startsWith("/api/public/appointment/")) return true
   // Reminder dispatcher — authorised by CRON_SECRET in the handler
   if (pathname === "/api/cron/dispatch") return true
-  // Embeddable widget assets from /public
-  if (
-    /^\/(webchat-widget\.js|webchat-core\.js|webchat-test\.html)$/.test(pathname)
-  ) {
-    return true
-  }
   return false
 }
 

@@ -10,7 +10,6 @@ import { emailDeliveryConfigured } from '@/lib/auth/passwordEmails'
 export type CheckStatus = 'ok' | 'warn' | 'fail' | 'info'
 export type StatusCheck = { id: string; area: string; label: string; status: CheckStatus; detail: string }
 
-const WORKER_STALE_MS = 5 * 60_000
 /** cron-job.org runs every 10 min in sending hours; the Vercel backstop once a day. */
 const DISPATCH_STALE_MS = 26 * 3_600_000
 
@@ -28,7 +27,7 @@ export function envChecks(env: Env): StatusCheck[] {
   const encKey = env.MESSAGING_ENCRYPTION_KEY || env.ENCRYPTION_SECRET
   checks.push(
     encKey && encKey !== 'default-secret-key' && encKey.length >= 16
-      ? { id: 'encryption_key', area: 'Security', label: 'Encryption key', status: 'ok', detail: 'A private encryption key is configured for stored secrets and messages.' }
+      ? { id: 'encryption_key', area: 'Security', label: 'Encryption key', status: 'ok', detail: 'A private encryption key is configured for stored secrets and patient data.' }
       : { id: 'encryption_key', area: 'Security', label: 'Encryption key', status: 'fail', detail: 'MESSAGING_ENCRYPTION_KEY is missing or uses the built-in default, so encrypted data is only obfuscated. Set a long random value (changing it later makes existing encrypted values unreadable).' },
   )
   const authSecret = env.NEXTAUTH_SECRET ?? env.AUTH_SECRET
@@ -39,7 +38,7 @@ export function envChecks(env: Env): StatusCheck[] {
   )
   checks.push({
     id: 'twilio',
-    area: 'Messaging',
+    area: 'Reminders',
     label: 'SMS (Twilio)',
     status: env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_PHONE_NUMBER ? 'ok' : 'info',
     detail: env.TWILIO_ACCOUNT_SID ? 'Twilio credentials are configured.' : 'Twilio is not configured — SMS reminders and STOP handling are off.',
@@ -96,7 +95,7 @@ export async function getSystemStatus(env: Env = process.env, now = new Date()):
       : { id: 'voice_paused', area: 'Voice agent', label: 'Kill switch', status: 'ok', detail: 'Voice tools are active.' },
   )
 
-  // Appointment reminders (outbox + /api/cron/dispatch — no worker needed)
+  // Appointment reminders (outbox + /api/cron/dispatch)
   if (!settings.flags.reminders) {
     checks.push({ id: 'reminders', area: 'Reminders', label: 'Patient reminders', status: 'info', detail: 'Reminders are switched off (Settings → Agenda). Turn them on at cutover from Zappy.' })
   } else {
@@ -116,11 +115,6 @@ export async function getSystemStatus(env: Env = process.env, now = new Date()):
       detail: failedMessages > 0 ? `${failedMessages} SMS/email could not be delivered. Open the appointment to see why (wrong number, no credit…).` : 'No failed messages.',
     })
   }
-
-  // Background worker — now only email campaigns / messaging automations
-  const hb = row?.workerHeartbeatAt
-  const workerOk = !!hb && now.getTime() - hb.getTime() <= WORKER_STALE_MS
-  checks.push({ id: 'worker', area: 'Campaigns', label: 'Background worker', status: workerOk ? 'ok' : 'info', detail: workerOk ? 'The worker is running.' : 'Not running. Only email campaigns and messaging automations need it (npm run worker + Redis on a long-running host); appointment reminders do not.' })
 
   checks.push(
     emailOk

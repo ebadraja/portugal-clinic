@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { encrypt } from '@/lib/crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(_req: NextRequest) {
@@ -16,8 +17,10 @@ export async function GET(_req: NextRequest) {
       connected: !!(s?.gmailAccessToken && s?.gmailRefreshToken),
       senderEmail: s?.gmailSenderEmail ?? null,
       fromName: s?.gmailFromName ?? '',
-      // Gmail OAuth reuses the Google Calendar OAuth client (same Cloud project)
+      // Google OAuth client (Cloud project) for Gmail; the columns keep their old Google Calendar names
       hasGoogleCreds: !!(s?.googleCalClientId && s?.googleCalClientSecret),
+      hasClientId: !!s?.googleCalClientId,
+      hasClientSecret: !!s?.googleCalClientSecret,
     });
   } catch (err) {
     console.error('[EMAIL_SETTINGS_GET]', err);
@@ -33,7 +36,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { fromName, enabled, disconnect } = body;
+    const { fromName, enabled, disconnect, clientId, clientSecret } = body;
 
     const current = await prisma.settings.findFirst();
     const updateData: Record<string, unknown> = {};
@@ -46,6 +49,8 @@ export async function PUT(req: NextRequest) {
     } else {
       if (fromName !== undefined) updateData.gmailFromName = fromName?.trim() || null;
       if (enabled !== undefined) updateData.gmailEnabled = enabled;
+      if (typeof clientId === 'string' && clientId.trim()) updateData.googleCalClientId = encrypt(clientId.trim());
+      if (typeof clientSecret === 'string' && clientSecret.trim()) updateData.googleCalClientSecret = encrypt(clientSecret.trim());
     }
 
     await prisma.settings.upsert({
@@ -60,7 +65,7 @@ export async function PUT(req: NextRequest) {
         action: 'UPDATE',
         entity: 'settings',
         entityId: 'email',
-        changes: { disconnect: !!disconnect, enabled, hasFromName: !!fromName },
+        changes: { disconnect: !!disconnect, enabled, hasFromName: !!fromName, hasClientId: !!clientId, hasClientSecret: !!clientSecret },
       },
     });
 

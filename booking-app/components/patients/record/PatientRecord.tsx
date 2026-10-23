@@ -41,7 +41,6 @@ export function PatientRecord({ patientId, initialTab }: { patientId: string; in
   const [missing, setMissing] = useState(false)
   const [options, setOptions] = useState<ClinicOptions | null>(null)
   const [recallMonths, setRecallMonths] = useState(6)
-  const [intakeForms, setIntakeForms] = useState<{ id: string; hippatizFormTitle: string; status: string; submittedAt: string; hippatizViewLink?: string | null }[]>([])
   const [tab, setTab] = useState<Tab>(initialTab)
   const [moreOpen, setMoreOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -74,10 +73,6 @@ export function PatientRecord({ patientId, initialTab }: { patientId: string; in
         })
         if (d.bookingPolicy?.recallMonths) setRecallMonths(d.bookingPolicy.recallMonths)
       })
-      .catch(() => {})
-    fetch(`/api/intake-forms?linkedPatientId=${patientId}&limit=50`, { signal: ctrl.signal })
-      .then((r) => (r.ok ? r.json() : { data: [] }))
-      .then((d) => setIntakeForms(d.data ?? []))
       .catch(() => {})
     return () => ctrl.abort()
   }, [patientId])
@@ -140,8 +135,8 @@ export function PatientRecord({ patientId, initialTab }: { patientId: string; in
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "overview", label: "Overview" },
     { id: "appointments", label: "Appointments", count: patient.appointments.length },
-    { id: "notes", label: "Notes & files", count: patient.notes.length + patient.documents.length + intakeForms.length },
-    { id: "comms", label: "Messages & calls", count: patient.callLogs.length + patient.chatLogs.length },
+    { id: "notes", label: "Notes & files", count: patient.notes.length + patient.documents.length },
+    { id: "comms", label: "Messages & calls", count: patient.callLogs.length + patient.notifications.length },
     { id: "details", label: "Details" },
   ]
 
@@ -361,26 +356,13 @@ export function PatientRecord({ patientId, initialTab }: { patientId: string; in
                 )}
                 <p className="mt-3 text-xs text-slate-400">Uploading files (X-rays, consent forms) needs file storage to be connected first.</p>
               </section>
-              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">Intake forms</h3>
-                {intakeForms.length === 0 ? <p className="text-sm text-slate-400">No intake forms linked.</p> : (
-                  <ul className="grid gap-1 text-sm">
-                    {intakeForms.map((f) => (
-                      <li key={f.id} className="flex items-center justify-between gap-2">
-                        <Link href={f.hippatizViewLink ?? `/intake-forms/${f.id}`} target={f.hippatizViewLink ? "_blank" : undefined} className="truncate text-blue-700 hover:underline dark:text-blue-300">{f.hippatizFormTitle}</Link>
-                        <span className="text-xs text-slate-400">{fmtDate(f.submittedAt)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
             </div>
           </div>
         )}
 
         {tab === "comms" && (
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-            <CommsPanel patient={patient} canEdit={canEdit} />
+            <CommsPanel patient={patient} />
           </section>
         )}
 

@@ -12,9 +12,15 @@
  */
 import prisma from '@/lib/prisma'
 import { decrypt } from '@/lib/crypto'
-import { parseFileAttachmentMetadata } from '@/lib/messaging/fileAttachments'
-import { deleteFile } from '@/lib/messaging/fileStorage'
-import { serializeMessage } from '@/lib/messaging/serialize'
+
+// Messaging and intake forms were removed from the CRM (23 Oct 2026), but rows written before
+// that stay in the database, so export and erasure still cover them.
+
+/** Storage key of a (legacy) message attachment, if the message had one. */
+function attachmentKey(metadata: unknown): string | null {
+  const key = (metadata as { storageKey?: unknown } | null)?.storageKey
+  return typeof key === 'string' && key ? key : null
+}
 
 function safeDecrypt(v: string | null | undefined): string | null {
   if (!v) return null
@@ -55,7 +61,20 @@ export async function exportPatientData(patientId: string) {
     callLogs: callLogs.map(({ recordingUrl, ...c }) => ({ ...c, hasRecording: !!recordingUrl })),
     emailLogs: emailLogs.map((e) => ({ ...e, toEmail: safeDecrypt((e as { toEmail?: string }).toEmail) ?? undefined })),
     emailUnsubscribe: unsubscribe ? { ...unsubscribe, email: safeDecrypt(unsubscribe.email) } : null,
-    messages: conversation ? conversation.messages.filter((m) => !m.isInternalNote).map(serializeMessage) : [],
+    messages: conversation
+      ? conversation.messages
+          .filter((m) => !m.isInternalNote)
+          .map((m) => ({
+            id: m.id,
+            senderType: m.senderType,
+            senderName: m.sender ? `${m.sender.firstName} ${m.sender.lastName}`.trim() : null,
+            channel: m.channel,
+            content: safeDecrypt(m.content),
+            contentType: m.contentType,
+            metadata: m.metadata,
+            createdAt: m.createdAt,
+          }))
+      : [],
   }
 }
 
@@ -78,7 +97,7 @@ export async function erasePatient(patientId: string, actorId: string, reason: s
   if (!patient) return null
 
   const storageKeys = (patient.conversation?.messages ?? [])
-    .map((m) => parseFileAttachmentMetadata(m.metadata)?.storageKey)
+    .map((m) => attachmentKey(m.metadata))
     .filter((k): k is string => !!k)
 
   const deleted = await prisma.$transaction(async (tx) => {
@@ -104,17 +123,10 @@ export async function erasePatient(patientId: string, actorId: string, reason: s
     return { callLogs: callLogs.count, chatLogs: chatLogs.count, intakeForms: intakeForms.count, emailLogs: emailLogs.count, callbacks: callbacks.count }
   })
 
-  // Stored message attachments (outside the database): best effort, reported back.
-  let filesDeleted = 0
-  const filesFailed: string[] = []
-  for (const key of storageKeys) {
-    try {
-      await deleteFile(key)
-      filesDeleted++
-    } catch {
-      filesFailed.push(key)
-    }
-  }
+  // Legacy message attachments lived in the old Supabase storage, which the CRM no longer reaches:
+  // report their keys so they can be removed by hand (none were created after the move to Neon).
+  const filesDeleted = 0
+  const filesFailed = storageKeys
 
   return { deleted, filesDeleted, filesFailed, documentsNeedingManualRemoval: patient._count.documents }
 }

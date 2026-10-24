@@ -739,6 +739,10 @@ model Settings {
   vapiAssistantSnapshot  Json?   @map("vapi_assistant_snapshot")
   vapiStructuredOutputId String? @map("vapi_structured_output_id")
   vapiPreviewAssistantId String? @map("vapi_preview_assistant_id")
+  // Acácia's prompt and first message as edited in Settings (lib/voice/promptTemplate.ts);
+  // NULL = the built-in text. Every save is kept in voice_prompt_versions.
+  voicePromptTemplate       String? @map("voice_prompt_template") @db.Text
+  voiceFirstMessageTemplate String? @map("voice_first_message_template") @db.Text
   voiceProvider     String  @default("11labs") @map("voice_provider")
   voiceId           String? @map("voice_id")
   greetingMessage   String? @map("greeting_message") @db.Text
@@ -823,6 +827,23 @@ model Settings {
 }
 
 // HIPAA-required audit trail
+/// Every saved version of Acácia's prompt (Settings → AI Voice Agent), newest first in the editor.
+/// No patient data. The author's name is copied so the history survives a deleted user.
+model VoicePromptVersion {
+  id            String   @id @default(cuid())
+  prompt        String   @db.Text
+  firstMessage  String   @map("first_message") @db.Text
+  /// True when this save went back to the built-in text.
+  isDefault     Boolean  @default(false) @map("is_default")
+  note          String?
+  createdById   String?  @map("created_by_id")
+  createdByName String?  @map("created_by_name")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("voice_prompt_versions")
+}
+
 model AuditLog {
   id     String  @id @default(cuid())
   userId String? @map("user_id")

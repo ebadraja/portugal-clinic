@@ -349,6 +349,8 @@ export type SettingsRowLike = {
   voiceAgentEnabled?: boolean | null
   voiceToolsPaused?: boolean | null
   voiceAgentName?: string | null
+  voicePromptTemplate?: string | null
+  voiceFirstMessageTemplate?: string | null
   greetingMessage?: string | null
   emergencyPhone?: string | null
 }
@@ -368,7 +370,8 @@ export type ClinicSettings = {
   reminderPolicy: ReminderPolicy
   /** Feature flags (Settings → System). */
   flags: { agendaV2: boolean; reminders: boolean }
-  voiceAgent: { enabled: boolean; paused: boolean; name: string; greeting: string; transferPhone: string }
+  /** promptTemplate / firstMessageTemplate: the clinic's edited text, or null for the built-in one. */
+  voiceAgent: { enabled: boolean; paused: boolean; name: string; greeting: string; transferPhone: string; promptTemplate: string | null; firstMessageTemplate: string | null }
   warnings: string[]
 }
 
@@ -422,6 +425,8 @@ export function buildClinicSettings(row: SettingsRowLike | null | undefined): Cl
       name: r.voiceAgentName || 'Acácia',
       greeting: r.greetingMessage ?? '',
       transferPhone: r.emergencyPhone || r.practicePhone || DEFAULT_PRACTICE.phone,
+      promptTemplate: r.voicePromptTemplate?.trim() ? r.voicePromptTemplate : null,
+      firstMessageTemplate: r.voiceFirstMessageTemplate?.trim() ? r.voiceFirstMessageTemplate : null,
     },
     warnings,
   }

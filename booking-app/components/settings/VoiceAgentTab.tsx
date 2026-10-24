@@ -11,6 +11,7 @@ import { LoadState, ReadOnlyNotice, SectionCard, StatusIcon, hintCls, inputCls, 
 import { useClinicSettings, useDraft } from "@/components/settings/use-clinic-settings";
 import { VapiConnectionCard } from "@/components/settings/VapiConnectionCard";
 import { VapiAssistantCard } from "@/components/settings/VapiAssistantCard";
+import { VoicePromptCard } from "@/components/settings/VoicePromptCard";
 
 type VoiceStatus = {
   paused: boolean;
@@ -123,6 +124,7 @@ export function VoiceAgentTab() {
 
       {isAdmin && <VapiConnectionCard />}
       {isAdmin && <VapiAssistantCard />}
+      {isAdmin && <VoicePromptCard />}
 
       <SectionCard
         title="Voice agent status"

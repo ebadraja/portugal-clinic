@@ -811,6 +811,23 @@ async function main() {
       const eoc = await vapi({ message: { type: 'end-of-call-report', call: { id: soCall, type: 'inboundPhoneCall', customer: { number: '+351966111222' } }, endedReason: 'customer-ended-call', artifact: { transcript: 'AI: Olá\nUser: Quero falar com alguém', messages: [{ role: 'assistant', message: 'Olá' }, { role: 'user', message: 'Quero falar com alguém' }], structuredOutputs: { 'so-123': { name: 'acacia_call_result', result: { call_outcome: 'TRANSFERRED', caller_intent: 'ROUTING' } } } } } })
       const cl = (await db.query('select outcome::text as outcome, intent::text as intent from call_logs where vapi_call_id=$1', [soCall])).rows[0]
       check('end-of-call reads Vapi structured outputs', eoc.status === 201 && cl?.outcome === 'TRANSFERRED' && cl?.intent === 'ROUTING', JSON.stringify(cl))
+      // Acácia's instructions, edited in Settings → AI Voice Agent
+      const pe = await admin.json('/api/settings/voice-prompt')
+      check('prompt editor: built-in text, variables with today’s values, empty history', pe.status === 200 && pe.data.isCustom === false && pe.data.prompt === pe.data.defaults.prompt && pe.data.variables.some((v) => v.name === 'today' && v.value) && pe.data.versions.length === 0, String(pe.status))
+      const badSave = await admin.json('/api/settings/voice-prompt', { method: 'PUT', body: { prompt: 'Marca consultas. {{dentist}}', firstMessage: 'Olá.' } })
+      check('…a prompt missing required clauses or with an unknown variable is refused (422)', badSave.status === 422 && /dentist/.test(badSave.data.error) && /Required instructions missing/.test(badSave.data.error), String(badSave.status))
+      const edited = `${pe.data.prompt}
+
+# Estacionamento
+Há estacionamento gratuito em frente à clínica.`
+      const peSaved = await admin.json('/api/settings/voice-prompt', { method: 'PUT', body: { prompt: edited, firstMessage: pe.data.firstMessage, note: 'Estacionamento' } })
+      check('…an edited prompt is saved as a version with author and note', peSaved.status === 200 && peSaved.data.isCustom === true && peSaved.data.versions[0]?.note === 'Estacionamento' && !!peSaved.data.versions[0]?.createdByName, JSON.stringify(peSaved.data?.versions?.[0] ?? peSaved.data).slice(0, 160))
+      await admin.json('/api/settings/vapi', { method: 'PUT', body: { transientEnabled: true } })
+      const edPrompt = (await (await ask()).json()).assistant?.model?.messages?.[0]?.content ?? ''
+      check('…the next call gets the edited prompt, live data filled in, no tags', /estacionamento gratuito/.test(edPrompt) && /Hoje é/.test(edPrompt) && !/\{\{/.test(edPrompt))
+      await admin.json('/api/settings/vapi', { method: 'PUT', body: { transientEnabled: false } })
+      const back = await admin.json('/api/settings/voice-prompt', { method: 'PUT', body: { prompt: pe.data.defaults.prompt, firstMessage: pe.data.defaults.firstMessage, note: 'Built-in again' } })
+      check('…going back to the built-in text is a version too', back.status === 200 && back.data.isCustom === false && back.data.versions.length === 2 && back.data.versions[0].isDefault === true)
     }
     const agendaPage = await admin.req('/appointments?agenda=1')
     check('/appointments?agenda=1 renders (200)', agendaPage.status === 200, String(agendaPage.status))
